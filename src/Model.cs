@@ -10,6 +10,7 @@ namespace AuroraProxy {
  public class Subscription {
   public string Id {get;set;} public string Name {get;set;} public string Url {get;set;}
   public string Updated {get;set;} public string Usage {get;set;}
+  public bool AutoName {get;set;}
   public Subscription(){Id=Guid.NewGuid().ToString("N");Name="新订阅";Url="";Updated="尚未更新";Usage="";}
   public override string ToString(){return Name;}
  }

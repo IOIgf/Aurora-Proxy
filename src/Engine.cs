@@ -9,7 +9,7 @@ using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
 namespace AuroraProxy {
- public class DownloadResult {public string Yaml,Usage;}
+ public class DownloadResult {public string Yaml,Usage,Name;}
  public sealed class Engine : IDisposable {
   public readonly Store Store;public readonly SystemProxy Proxy;
   public event Action<string> Log;public event Action Exited;
@@ -26,7 +26,7 @@ namespace AuroraProxy {
    req.AutomaticDecompression=DecompressionMethods.GZip|DecompressionMethods.Deflate;req.Proxy=throughProxy?new WebProxy("http://127.0.0.1:"+port):null;
    try{using(var res=(HttpWebResponse)req.GetResponse())using(var input=res.GetResponseStream())using(var output=new MemoryStream()){
     byte[] buf=new byte[8192];int n;while((n=input.Read(buf,0,buf.Length))>0){if(output.Length+n>8*1024*1024)throw new InvalidDataException("订阅超过 8 MiB。");output.Write(buf,0,n);}
-    string yaml=new UTF8Encoding(false,true).GetString(output.ToArray());return new DownloadResult(){Yaml=yaml,Usage=FormatUsage(res.Headers["subscription-userinfo"])};
+    string yaml=new UTF8Encoding(false,true).GetString(output.ToArray());return new DownloadResult(){Yaml=yaml,Usage=FormatUsage(res.Headers["subscription-userinfo"]),Name=SubscriptionNames.FromHeaders(res.Headers["profile-title"],res.Headers["Content-Disposition"])};
    }}catch(WebException ex){if(ex.Response!=null){using(var res=(HttpWebResponse)ex.Response){throw new IOException("下载失败：HTTP "+(int)res.StatusCode+"。请检查订阅是否过期。",ex);}}
     throw new IOException("订阅下载失败。请检查网络、链接和 Win7 的 TLS 1.2 更新；内核运行后可尝试“通过代理下载”。",ex);}
   }

@@ -81,7 +81,7 @@ try {
     if ([Reflection.AssemblyName]::GetAssemblyName($executable).Version.ToString() -ne $assemblyVersion) { throw 'Built assembly version does not match the tag.' }
 
     # Run deterministic checkbox buffer regression and real-core integration on Windows.
-    foreach ($test in @('CheckBoxFrameTests', 'IntegrationTests')) {
+    foreach ($test in @('CheckBoxFrameTests', 'SubscriptionNameTests', 'SubscriptionNameUiTests', 'IntegrationTests')) {
         $testExe = Join-Path $stage ($test + '.exe')
         & $compiler @common /target:exe "/out:$testExe" "/reference:$executable" (Join-Path $stage "tests/$test.cs")
         if ($LASTEXITCODE -ne 0) { throw "Test compilation failed: $test" }

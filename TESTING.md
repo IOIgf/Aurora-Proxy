@@ -1,5 +1,12 @@
 # Verification
 
+## 1.1.9 subscription name detection
+
+- `SubscriptionNameTests.cs` covers title precedence, UTF-8 / Base64 / URL-safe decoding, RFC 6266 filename and extended filename handling, malformed-header fallback, whitespace / control cleanup, bounded display names without split surrogate pairs, domain-only fallback, manual priority, persisted mode and old settings compatibility. Local HTTP responses and redirects exercise the actual download path.
+- `SubscriptionNameUiTests.cs` drives the real import/edit dialogs and refresh handlers against a local subscription server. It checks blank-name import, manual aliases, automatic updates, clearing a name with the same URL, unchanged automatic edits, switching to a manual alias, rejected configuration preserving name/cache, absent metadata and save/reload behavior.
+- The input and controlled-layout suites were rerun after changing the name label/default and blank-name validation. All HTTP fixtures use artificial local URLs; no user subscriptions are needed.
+- Both new suites are included in Windows release builds, alongside the complete-checkbox-frame and real-core integration checks. Passing on the hosted Windows build still does not establish Windows 7 OS acceptance.
+
 ## GitHub Actions Windows build and tag releases
 
 - The workflow builds on Windows Server 2022 with the Windows .NET Framework compiler, C# 4 syntax and checksum-pinned Microsoft .NET Framework 4.0 reference assemblies. It compiles a fresh client from staged sources rather than republishing the checked-in executable.
