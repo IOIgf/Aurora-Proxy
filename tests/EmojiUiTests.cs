@@ -1,0 +1,8 @@
+using System;
+using System.Drawing;
+using System.Windows.Forms;
+using AuroraProxy;
+class EmojiUiTests {
+ static void Check(bool ok,string name){if(!ok)throw new Exception(name);Console.WriteLine("PASS: "+name);}
+ [STAThread] static int Main(){try{Application.EnableVisualStyles();int n;Check(EmojiText.Match("🇭🇰 香港",0,out n)=="1f1ed-1f1f0"&&n==4,"flag is one artwork, four UTF16 units");Check(EmojiText.Match("🚀 自动选择",0,out n)=="1f680"&&n==2,"supplementary emoji");Check(EmojiText.Match("❤️",0,out n)=="2764"&&n==2,"variation selector consumed");Check(EmojiText.Match("👨‍👩‍👧‍👦",0,out n)=="1f468-200d-1f469-200d-1f467-200d-1f466"&&n==11,"longest joined sequence");Check(EmojiText.Match("香港",0,out n)==null&&n==0,"ordinary names untouched");using(var font=Theme.Font(10))using(var b=new Bitmap(480,160))using(var g=Graphics.FromImage(b)){g.Clear(Theme.Card);EmojiText.Draw(g,"🇭🇰 香港 01 · 🚀 自动选择 · ❤️ 推荐",font,new Rectangle(8,8,460,36),Theme.Text,TextFormatFlags.SingleLine|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);int colored=0;for(int x=8;x<28;x++)for(int y=8;y<44;y++){Color c=b.GetPixel(x,y);if(c.R>c.G*1.5&&c.R>c.B*1.5)colored++;}Check(colored>10,"flag is colored artwork rather than font glyph");var clip=new Rectangle(10,60,20,20);g.SetClip(clip);EmojiText.Draw(g,"🇺🇸 美国 🚀",font,new Rectangle(0,50,200,40),Theme.Text,TextFormatFlags.VerticalCenter);Check(b.GetPixel(31,65).ToArgb()==Theme.Card.ToArgb(),"painting respects invalidated clip");g.ResetClip();b.Save("emoji-render.png");}Console.WriteLine("Completed 7 emoji checks.");return 0;}catch(Exception e){Console.Error.WriteLine(e);return 1;}}
+}

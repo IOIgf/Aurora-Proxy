@@ -7,8 +7,8 @@ using System.Reflection;
 
 [assembly: AssemblyTitle("Aurora Proxy")]
 [assembly: AssemblyDescription("A Windows 7 compatible mihomo desktop client")]
-[assembly: AssemblyVersion("1.1.9.0")]
-[assembly: AssemblyFileVersion("1.1.9.0")]
+[assembly: AssemblyVersion("1.1.10.0")]
+[assembly: AssemblyFileVersion("1.1.10.0")]
 namespace AuroraProxy {
  static class Program {
   [STAThread] static void Main(string[] args){

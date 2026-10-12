@@ -16,3 +16,5 @@ Unmodified upstream binary, redistributed as a separate executable:
 The corresponding upstream source for the pinned tag, including build definitions and dependency manifests, is included in `third-party/mihomo-v1.19.32-source.tar.gz`. Upstream source and build instructions are also available at https://github.com/MetaCubeX/mihomo/tree/v1.19.32 .
 
 Aurora Proxy communicates with this executable through its process interface and local REST API. It does not modify or link the mihomo code into the client assembly. The client license does not supersede mihomo's license.
+
+Emoji artwork: Twemoji v15.1.0 by Twitter, Inc. and other contributors, CC BY 4.0. https://github.com/jdecked/twemoji . Resized to 32px and embedded; license in third-party/LICENSE-Twemoji-graphics.txt.

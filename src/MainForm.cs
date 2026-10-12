@@ -35,21 +35,21 @@ namespace AuroraProxy {
    ResumeLayout(true);layoutReady=true;
   }
   void BuildFrame(){
-   var layout=new TableLayoutPanel(){Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,Margin=new Padding(0)};layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,194));layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));Controls.Add(layout);
-   var sidebar=new Panel(){Dock=DockStyle.Fill,Padding=new Padding(18,25,18,16),Tag="sidebar"};layout.Controls.Add(sidebar,0,0);
+   var layout=new BufferedTableLayoutPanel(){Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,Margin=new Padding(0)};layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,194));layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));Controls.Add(layout);
+   var sidebar=new BufferedPanel(){Dock=DockStyle.Fill,Padding=new Padding(18,25,18,16),Tag="sidebar"};layout.Controls.Add(sidebar,0,0);
    var logo=new Logo(){Dock=DockStyle.Top};sidebar.Controls.Add(logo);
-   var navPanel=new FlowLayoutPanel(){Location=new Point(16,130),Size=new Size(165,350),FlowDirection=FlowDirection.TopDown,WrapContents=false,Tag="sidebar"};sidebar.Controls.Add(navPanel);
+   var navPanel=new BufferedFlowLayoutPanel(){Location=new Point(16,130),Size=new Size(165,350),FlowDirection=FlowDirection.TopDown,WrapContents=false,Tag="sidebar"};sidebar.Controls.Add(navPanel);
    string[] names={"01   概览","02   订阅","03   节点","04   日志","05   设置","06   局域网","07   连接"};nav=new SoftButton[7];for(int i=0;i<7;i++){int n=i;nav[i]=new SoftButton(){Text=names[i],Navigation=true,Tone=new PaletteTone[]{PaletteTone.Blue,PaletteTone.Teal,PaletteTone.Violet,PaletteTone.Amber,PaletteTone.Blue,PaletteTone.Teal,PaletteTone.Violet}[i],Size=new Size(162,42),Margin=new Padding(0,0,0,8)};nav[i].Click+=delegate{if(!busy)ShowPage(n);};navPanel.Controls.Add(nav[i]);}
-   var bottom=new Panel(){Dock=DockStyle.Bottom,Height=100,Tag="sidebar"};sideState=Label("●  未连接",10);sideState.Location=new Point(2,16);sideState.AutoSize=true;bottom.Controls.Add(sideState);
-   var foot=Label("Windows 7+  ·  v1.1.9",8,true);foot.Location=new Point(2,57);bottom.Controls.Add(foot);sidebar.Controls.Add(bottom);
-   var main=new TableLayoutPanel(){Dock=DockStyle.Fill,Padding=new Padding(34,24,34,24),ColumnCount=1,RowCount=3};main.RowStyles.Add(new RowStyle(SizeType.Absolute,90));main.RowStyles.Add(new RowStyle(SizeType.Percent,100));main.RowStyles.Add(new RowStyle(SizeType.Absolute,30));layout.Controls.Add(main,1,0);
-   var head=new Panel(){Dock=DockStyle.Fill};title=Label("概览",23);title.Font=Theme.Font(23,FontStyle.Bold);subtitle=Label("连接状态与日常控制",9,true);subtitle.Location=new Point(2,50);head.Controls.Add(title);head.Controls.Add(subtitle);main.Controls.Add(head,0,0);
+   var bottom=new BufferedPanel(){Dock=DockStyle.Bottom,Height=100,Tag="sidebar"};sideState=Label("●  未连接",10);sideState.Location=new Point(2,16);sideState.AutoSize=true;bottom.Controls.Add(sideState);
+   var foot=Label("Windows 7+  ·  v1.1.10",8,true);foot.Location=new Point(2,57);bottom.Controls.Add(foot);sidebar.Controls.Add(bottom);
+   var main=new BufferedTableLayoutPanel(){Dock=DockStyle.Fill,Padding=new Padding(34,24,34,24),ColumnCount=1,RowCount=3};main.RowStyles.Add(new RowStyle(SizeType.Absolute,90));main.RowStyles.Add(new RowStyle(SizeType.Percent,100));main.RowStyles.Add(new RowStyle(SizeType.Absolute,30));layout.Controls.Add(main,1,0);
+   var head=new BufferedPanel(){Dock=DockStyle.Fill};title=Label("概览",23);title.Font=Theme.Font(23,FontStyle.Bold);subtitle=Label("连接状态与日常控制",9,true);subtitle.Location=new Point(2,50);head.Controls.Add(title);head.Controls.Add(subtitle);main.Controls.Add(head,0,0);
    content=new TransitionPanel(){Dock=DockStyle.Fill};main.Controls.Add(content,0,1);activity=new ActivityIndicator(){Text="READY  /  就绪",Dock=DockStyle.Fill,Margin=new Padding(0)};main.Controls.Add(activity,0,2);Theme.Apply(this);
   }
   static Label Label(string text,float size=10,bool muted=false){return new Label(){Text=text,AutoSize=true,Font=Theme.Font(size),Tag=muted?"muted":null,BackColor=Color.Transparent,Margin=new Padding(0,0,0,10)};}
   static SoftButton Button(string text,Action action,bool primary=false,int width=116){var b=new SoftButton(){Text=text,Primary=primary,Width=width,Tone=text=="删除"||text.StartsWith("断开")?PaletteTone.Amber:text.StartsWith("测试")?PaletteTone.Violet:PaletteTone.Neutral};b.Click+=delegate{action();};return b;}
-  static FlowLayoutPanel Row(){return new FlowLayoutPanel(){Dock=DockStyle.Top,Height=52,WrapContents=false,Margin=new Padding(0),Padding=new Padding(0)};}
-  static TableLayoutPanel Stack(){var t=new TableLayoutPanel(){Dock=DockStyle.Fill,ColumnCount=1,RowCount=0,Margin=new Padding(0)};t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));return t;}
+  static FlowLayoutPanel Row(){return new BufferedFlowLayoutPanel(){Dock=DockStyle.Top,Height=52,WrapContents=false,Margin=new Padding(0),Padding=new Padding(0)};}
+  static TableLayoutPanel Stack(){var t=new BufferedTableLayoutPanel(){Dock=DockStyle.Fill,ColumnCount=1,RowCount=0,Margin=new Padding(0)};t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));return t;}
   static void Add(TableLayoutPanel t,Control c,int height){int i=t.RowCount++;t.RowStyles.Add(height<0?new RowStyle(SizeType.Percent,100):new RowStyle(SizeType.Absolute,height));c.Dock=DockStyle.Fill;t.Controls.Add(c,0,i);}
   static ListView List(params string[] columns){var l=new StyledListView(){View=View.Details,FullRowSelect=true,MultiSelect=false,HideSelection=false,BorderStyle=BorderStyle.None,Font=Theme.Font(9),HeaderStyle=ColumnHeaderStyle.Nonclickable};foreach(string c in columns)l.Columns.Add(c,150);l.Resize+=delegate{if(l.Columns.Count>0){int used=0;for(int i=0;i<l.Columns.Count-1;i++)used+=l.Columns[i].Width;l.Columns[l.Columns.Count-1].Width=Math.Max(90,l.ClientSize.Width-used-2);}};return l;}
   void ShowPage(int n){content.Cancel();content.SuspendLayout();page=n;foreach(Control c in content.Controls.Cast<Control>().ToArray())c.Dispose();content.Controls.Clear();stateLabel=null;subscriptions=null;nodes=null;logs=null;connections=null;networkStatus=null;lanAddressBox=null;
@@ -59,7 +59,7 @@ namespace AuroraProxy {
    // Pages built after the form's first automatic scale need the same 96-DPI
    // baseline as the initial frame. Never scale existing pages again.
    if(layoutReady){var dpi=CurrentAutoScaleDimensions;var factor=new SizeF(dpi.Width/96f,dpi.Height/96f);if(factor.Width!=1||factor.Height!=1)foreach(Control c in content.Controls)c.Scale(factor);}
-   Theme.Apply(this);RefreshState();content.ResumeLayout(true);if(!preview)content.AnimateIn();
+   Theme.Apply(content);RefreshState();content.ResumeLayout(true);content.Invalidate(true);
    if(n==2&&engine.Running)RefreshNodes();if(n==6&&engine.Running)RefreshConnections();
   }
   void Overview(){
@@ -70,10 +70,10 @@ namespace AuroraProxy {
    detailLabel=Label("选择订阅，然后启动 mihomo 内核。",9,true);detailLabel.Location=new Point(25,101);hero.Controls.Add(detailLabel);
    power=Button("启动内核",TogglePower,true,136);power.Anchor=AnchorStyles.Top|AnchorStyles.Right;power.Location=new Point(600,57);hero.Controls.Add(power);hero.Resize+=delegate{power.Location=new Point(hero.Width-164,59);detailLabel.MaximumSize=new Size(Math.Max(100,hero.Width-210),40);};
    var badge=Label("LOCAL  /  127.0.0.1:"+store.State.Port,8,true);badge.Location=new Point(25,144);hero.Controls.Add(badge);
-   var metrics=new TableLayoutPanel(){ColumnCount=3,RowCount=1,Margin=new Padding(0,0,0,18)};for(int i=0;i<3;i++)metrics.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,33.33f));Add(stack,metrics,116);
+   var metrics=new BufferedTableLayoutPanel(){ColumnCount=3,RowCount=1,Margin=new Padding(0,0,0,18)};for(int i=0;i<3;i++)metrics.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,33.33f));Add(stack,metrics,116);
    downloadLabel=Metric(metrics,0,"下载速率","0 B/s",PaletteTone.Teal);uploadLabel=Metric(metrics,1,"上传速率","0 B/s",PaletteTone.Blue);connectionsLabel=Metric(metrics,2,"活跃连接","0",PaletteTone.Violet);
    var options=new Surface(){Margin=new Padding(0,0,0,0)};Add(stack,options,-1);
-   var grid=new TableLayoutPanel(){Dock=DockStyle.Fill,ColumnCount=2,RowCount=4};grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,192));for(int i=0;i<4;i++)grid.RowStyles.Add(new RowStyle(SizeType.Percent,25));options.Controls.Add(grid);
+   var grid=new BufferedTableLayoutPanel(){Dock=DockStyle.Fill,ColumnCount=2,RowCount=4};grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,192));for(int i=0;i<4;i++)grid.RowStyles.Add(new RowStyle(SizeType.Percent,25));options.Controls.Add(grid);
    grid.Controls.Add(Label("当前订阅",9,true),0,0);activeLabel=Label("未选择",11);activeLabel.Dock=DockStyle.Fill;activeLabel.AutoSize=false;activeLabel.AutoEllipsis=true;grid.Controls.Add(activeLabel,0,1);
    var manage=Button("管理订阅",delegate{ShowPage(1);},false,136);grid.Controls.Add(manage,1,0);
    grid.Controls.Add(Label("系统代理",10),0,2);proxyButton=Button("开启系统代理",ToggleProxy,false,168);grid.Controls.Add(proxyButton,1,2);
@@ -143,7 +143,7 @@ namespace AuroraProxy {
   void Logs(){var stack=Stack();content.Controls.Add(stack);var row=Row();row.Controls.Add(Button("清空日志",delegate{logLines.Clear();logs.Clear();}));row.Controls.Add(Button("导出日志",ExportLogs));Add(stack,row,58);var card=new Surface(){Padding=new Padding(15)};logs=new RichTextBox(){Dock=DockStyle.Fill,ReadOnly=true,BorderStyle=BorderStyle.None,Font=new Font("Consolas",10),WordWrap=false,DetectUrls=false};card.Controls.Add(logs);Add(stack,card,-1);logs.Text=String.Join(Environment.NewLine,logLines.ToArray());logs.SelectionStart=logs.TextLength;logs.ScrollToCaret();}
   void ExportLogs(){using(var d=new SaveFileDialog(){Filter="日志文件|*.log",FileName="aurora-"+DateTime.Now.ToString("yyyyMMdd-HHmm")+".log"}){if(d.ShowDialog(this)==DialogResult.OK){try{File.WriteAllText(d.FileName,String.Join(Environment.NewLine,logLines.ToArray()),Encoding.UTF8);}catch(Exception ex){Error(ex);}}}}
   void SettingsPage(){var stack=Stack();content.Controls.Add(stack);var card=new Surface(){Margin=new Padding(0,0,0,14)};Add(stack,card,-1);
-   card.AutoScroll=true;var grid=new TableLayoutPanel(){Dock=DockStyle.Top,Height=385,ColumnCount=3,RowCount=11};grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,134));grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,108));for(int i=0;i<10;i++)grid.RowStyles.Add(new RowStyle(SizeType.Absolute,34));grid.RowStyles.Add(new RowStyle(SizeType.Percent,100));card.Controls.Add(grid);
+   card.AutoScroll=true;var grid=new BufferedTableLayoutPanel(){Dock=DockStyle.Top,Height=385,ColumnCount=3,RowCount=11};grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,134));grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,108));for(int i=0;i<10;i++)grid.RowStyles.Add(new RowStyle(SizeType.Absolute,34));grid.RowStyles.Add(new RowStyle(SizeType.Percent,100));card.Controls.Add(grid);
    AddSetting(grid,0,"mihomo 内核",corePath=new TextBox(){Text=store.State.CorePath,Width=330});grid.Controls.Add(Button("选择文件",ChooseCore,false,98),2,0);
    AddSetting(grid,1,"本地代理端口",port=new NumericUpDown(){Minimum=1024,Maximum=65535,Value=store.State.Port,Width=130});
    AddSetting(grid,2,"控制接口端口",apiPort=new NumericUpDown(){Minimum=1024,Maximum=65535,Value=store.State.ApiPort,Width=130});

@@ -1,4 +1,4 @@
-# Aurora Proxy 1.1.9
+# Aurora Proxy 1.1.10
 
 一个面向 Windows 7 的原生 mihomo 桌面客户端。深色 / 浅色主题、圆角卡片与输入框、简洁导航，使用 .NET Framework WinForms，不依赖浏览器组件。配色以深蓝与石墨灰为底，使用钴蓝主按钮、青绿状态、紫色指标及琥珀色操作提示。
 
@@ -44,8 +44,8 @@
 提交代码后，推送 `v主版本.次版本.修订版本` 标签即可自动编译、检查并发布，例如：
 
 ```bash
-git tag -a v1.1.9 -m "Aurora Proxy v1.1.9"
-git push origin v1.1.9
+git tag -a v1.1.10 -m "Aurora Proxy v1.1.10"
+git push origin v1.1.10
 ```
 
 - GitHub Actions 在 Windows Server 2022 上使用 C# 4 和固定的 Microsoft .NET Framework 4.0 参考程序集编译，校验内核文件，并运行勾选框缓冲区回归及真实 mihomo 接口检查。

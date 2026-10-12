@@ -7,7 +7,7 @@ if not exist "%CSC%" (
  pause
  exit /b 1
 )
-"%CSC%" /nologo /target:winexe /platform:anycpu /optimize+ /utf8output /win32manifest:app.manifest /win32icon:aurora.ico /out:AuroraProxy.exe /reference:System.dll,System.Core.dll,System.Drawing.dll,System.Windows.Forms.dll,System.Web.Extensions.dll,System.Security.dll,Accessibility.dll src\*.cs
+"%CSC%" /nologo /resource:src\Emoji.bin,AuroraProxy.Emoji /target:winexe /platform:anycpu /optimize+ /utf8output /win32manifest:app.manifest /win32icon:aurora.ico /out:AuroraProxy.exe /reference:System.dll,System.Core.dll,System.Drawing.dll,System.Windows.Forms.dll,System.Web.Extensions.dll,System.Security.dll,Accessibility.dll src\*.cs
 if errorlevel 1 (
  pause
  exit /b 1

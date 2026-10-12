@@ -76,7 +76,7 @@ namespace AuroraProxy {
   PaletteTone tone;
   public PaletteTone Tone {get{return tone;}set{tone=value;BackColor=FillColor;Invalidate();}}
   public Color FillColor {get{return tone==PaletteTone.Neutral?Theme.Card:Theme.Blend(Theme.Card,Theme.ToneColor(tone),Theme.Dark?.075:.045);}}
-  public Surface(){DoubleBuffered=true;SetStyle(ControlStyles.SupportsTransparentBackColor,false);Padding=new Padding(22);BackColor=FillColor;}
+  public Surface(){DoubleBuffered=true;SetStyle(ControlStyles.ResizeRedraw,true);SetStyle(ControlStyles.SupportsTransparentBackColor,false);Padding=new Padding(22);BackColor=FillColor;}
   protected override void OnPaintBackground(PaintEventArgs e){Theme.PaintBehind(this,e.Graphics,e.ClipRectangle);}
   protected override void OnPaint(PaintEventArgs e){PaintBackgroundLayer(e.Graphics);base.OnPaint(e);}
   public void PaintBackgroundLayer(Graphics graphics){if(Width<30||Height<30)return;var state=graphics.Save();try{graphics.SetClip(ClientRectangle,CombineMode.Intersect);graphics.SmoothingMode=SmoothingMode.AntiAlias;using(var p=Theme.Rounded(new Rectangle(0,0,Width-1,Height-1),14))using(var b=new SolidBrush(FillColor))using(var pen=new Pen(tone==PaletteTone.Neutral?Theme.Edge:Theme.Blend(Theme.Edge,Theme.ToneColor(tone),.24))){graphics.FillPath(b,p);graphics.DrawPath(pen,p);}if(tone!=PaletteTone.Neutral&&Width>70)using(var pen=new Pen(Theme.ToneColor(tone),2)){pen.StartCap=LineCap.Round;pen.EndCap=LineCap.Round;graphics.DrawLine(pen,Width-48,20,Width-24,20);}}finally{graphics.Restore(state);}}
@@ -162,7 +162,10 @@ namespace AuroraProxy {
   protected override void Dispose(bool disposing){if(disposing&&animation!=null){animation.Stop();animation.Dispose();animation=null;}base.Dispose(disposing);}
  }
  public static class Motion {public static bool Enabled=true;}
- public class TransitionPanel:Panel {
+ public class BufferedPanel:Panel { public BufferedPanel(){DoubleBuffered=true;SetStyle(ControlStyles.ResizeRedraw,true);} }
+ public class BufferedTableLayoutPanel:TableLayoutPanel { public BufferedTableLayoutPanel(){DoubleBuffered=true;SetStyle(ControlStyles.ResizeRedraw,true);} }
+ public class BufferedFlowLayoutPanel:FlowLayoutPanel { public BufferedFlowLayoutPanel(){DoubleBuffered=true;SetStyle(ControlStyles.ResizeRedraw,true);} }
+ public class TransitionPanel:BufferedPanel {
   System.Windows.Forms.Timer animation;Stopwatch watch=new Stopwatch();Control body;
   public TransitionPanel(){DoubleBuffered=true;animation=new System.Windows.Forms.Timer(){Interval=16};animation.Tick+=delegate{if(body==null||body.IsDisposed){Cancel();return;}double t=Math.Min(1,watch.Elapsed.TotalMilliseconds/180.0);int offset=(int)Math.Round(14*Math.Pow(1-t,3));body.Location=new Point(offset,0);if(t>=1||!Motion.Enabled)Cancel();};}
   public void AnimateIn(){Cancel();if(!Motion.Enabled||!Visible||!IsHandleCreated||Controls.Count==0)return;body=Controls[0];body.Dock=DockStyle.None;body.Bounds=new Rectangle(14,0,ClientSize.Width,ClientSize.Height);watch.Restart();animation.Start();}
@@ -193,7 +196,7 @@ namespace AuroraProxy {
   public StyledListView(){OwnerDraw=true;DoubleBuffered=true;spacing=new ImageList(){ImageSize=new Size(1,36)};spacing.Images.Add(new Bitmap(1,36));SmallImageList=spacing;}
   protected override void OnDrawColumnHeader(DrawListViewColumnHeaderEventArgs e){using(var b=new SolidBrush(Theme.Card))e.Graphics.FillRectangle(b,e.Bounds);using(var pen=new Pen(Theme.Edge))e.Graphics.DrawLine(pen,e.Bounds.Left,e.Bounds.Bottom-1,e.Bounds.Right,e.Bounds.Bottom-1);Theme.DrawText(e.Graphics,e.Header.Text,Font,new Rectangle(e.Bounds.X+10,e.Bounds.Y,e.Bounds.Width-16,e.Bounds.Height),Theme.Muted,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);}
   protected override void OnDrawItem(DrawListViewItemEventArgs e){if(View!=View.Details)e.DrawDefault=true;}
-  protected override void OnDrawSubItem(DrawListViewSubItemEventArgs e){Color bg=e.Item.Selected?Theme.Blend(Theme.Card,Theme.Blue,Theme.Dark?.18:.13):Theme.Card;using(var b=new SolidBrush(bg))e.Graphics.FillRectangle(b,e.Bounds);Theme.DrawText(e.Graphics,e.SubItem.Text,Font,new Rectangle(e.Bounds.X+10,e.Bounds.Y,e.Bounds.Width-16,e.Bounds.Height),Theme.Text,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);}
+  protected override void OnDrawSubItem(DrawListViewSubItemEventArgs e){Color bg=e.Item.Selected?Theme.Blend(Theme.Card,Theme.Blue,Theme.Dark?.18:.13):Theme.Card;using(var b=new SolidBrush(bg))e.Graphics.FillRectangle(b,e.Bounds);EmojiText.Draw(e.Graphics,e.SubItem.Text,Font,new Rectangle(e.Bounds.X+10,e.Bounds.Y,e.Bounds.Width-16,e.Bounds.Height),Theme.Text,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);}
   protected override void Dispose(bool disposing){base.Dispose(disposing);if(disposing&&spacing!=null){spacing.Dispose();spacing=null;}}
  }
 }

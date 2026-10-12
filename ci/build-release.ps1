@@ -75,13 +75,14 @@ try {
     foreach ($name in $referenceNames) { $common += '/reference:' + (Join-Path $references ($name + '.dll')) }
     $executable = Join-Path $stage 'AuroraProxy.exe'
     $compilerArgs = $common + @('/target:winexe', "/out:$executable", ('/win32manifest:' + (Join-Path $stage 'app.manifest')), ('/win32icon:' + (Join-Path $stage 'aurora.ico')))
+    $compilerArgs += "/resource:$(Join-Path $stage 'src/Emoji.bin'),AuroraProxy.Emoji"
     $sources = @(Get-ChildItem (Join-Path $stage 'src') -Filter '*.cs' | ForEach-Object FullName)
     & $compiler @compilerArgs @sources
     if ($LASTEXITCODE -ne 0) { throw 'Client compilation failed.' }
     if ([Reflection.AssemblyName]::GetAssemblyName($executable).Version.ToString() -ne $assemblyVersion) { throw 'Built assembly version does not match the tag.' }
 
     # Run deterministic checkbox buffer regression and real-core integration on Windows.
-    foreach ($test in @('CheckBoxFrameTests', 'SubscriptionNameTests', 'SubscriptionNameUiTests', 'IntegrationTests')) {
+    foreach ($test in @('EmojiUiTests', 'ResizeUiTests', 'CheckBoxFrameTests', 'SubscriptionNameTests', 'SubscriptionNameUiTests', 'IntegrationTests')) {
         $testExe = Join-Path $stage ($test + '.exe')
         & $compiler @common /target:exe "/out:$testExe" "/reference:$executable" (Join-Path $stage "tests/$test.cs")
         if ($LASTEXITCODE -ne 0) { throw "Test compilation failed: $test" }
@@ -89,6 +90,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Regression checks failed: $test" }
         Remove-Item $testExe
     }
+    Remove-Item (Join-Path $stage 'emoji-render.png') -ErrorAction SilentlyContinue
     Remove-Item (Join-Path $stage 'checkbox-complete-frame.png') -ErrorAction SilentlyContinue
 
     $manifest = @(Get-ChildItem $stage -File -Recurse | Sort-Object FullName | ForEach-Object {
