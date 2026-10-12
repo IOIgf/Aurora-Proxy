@@ -164,7 +164,21 @@ namespace AuroraProxy {
  public static class Motion {public static bool Enabled=true;}
  public class BufferedPanel:Panel { public BufferedPanel(){DoubleBuffered=true;SetStyle(ControlStyles.ResizeRedraw,true);} }
  public class BufferedTableLayoutPanel:TableLayoutPanel { public BufferedTableLayoutPanel(){DoubleBuffered=true;SetStyle(ControlStyles.ResizeRedraw,true);} }
- public class BufferedFlowLayoutPanel:FlowLayoutPanel { public BufferedFlowLayoutPanel(){DoubleBuffered=true;SetStyle(ControlStyles.ResizeRedraw,true);} }
+ // FlowLayoutPanel scales every child's bounds inside each layout pass, so
+ // after the form's DPI scaling any later-added control (page action rows,
+ // dialog button bars) would be enlarged a second time and drift out of its
+ // row. Children already size themselves from the scaled page font, so keep
+ // their design-time bounds and let the flow layout reposition them.
+ public class BufferedFlowLayoutPanel:FlowLayoutPanel {
+  readonly Dictionary<Control,Size> designSizes=new Dictionary<Control,Size>();
+  public BufferedFlowLayoutPanel(){DoubleBuffered=true;SetStyle(ControlStyles.ResizeRedraw,true);}
+  protected override void OnLayoutCompleted(LayoutEventArgs levent){base.OnLayoutCompleted(levent);RememberDesignSizes();}
+  protected override bool ScaleChildren {get{RestoreDesignSizes();return false;}}
+  // Layout passes that enlarge AutoScrollMinSize (e.g. a scrollbar appearing)
+  // shrink Dock=Fill children; restore the heights this container owns.
+  void RememberDesignSizes(){foreach(Control c in Controls){if(c.Dock==DockStyle.Fill)c.MinimumSize=new Size(0,c.Height);else if(!c.Dock.Equals(DockStyle.None))continue;else designSizes[c]=c.Size;}}
+  void RestoreDesignSizes(){foreach(KeyValuePair<Control,Size> pair in designSizes)if(pair.Key.Parent==this&&pair.Key.Dock==DockStyle.None&&pair.Key.Size!=pair.Value)pair.Key.Size=pair.Value;}
+ }
  public class TransitionPanel:BufferedPanel {
   System.Windows.Forms.Timer animation;Stopwatch watch=new Stopwatch();Control body;
   public TransitionPanel(){DoubleBuffered=true;animation=new System.Windows.Forms.Timer(){Interval=16};animation.Tick+=delegate{if(body==null||body.IsDisposed){Cancel();return;}double t=Math.Min(1,watch.Elapsed.TotalMilliseconds/180.0);int offset=(int)Math.Round(14*Math.Pow(1-t,3));body.Location=new Point(offset,0);if(t>=1||!Motion.Enabled)Cancel();};}
