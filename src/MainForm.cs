@@ -1,0 +1,189 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Text;
+using System.Threading;
+using System.Collections;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Windows.Forms;
+using System.Diagnostics;
+
+namespace AuroraProxy {
+ public partial class MainForm:Form {
+  readonly Store store;readonly Engine engine;readonly bool preview;
+  TransitionPanel content;Label title,subtitle,sideState;ActivityIndicator activity;SoftButton[] nav;int page;
+  Label stateLabel,activeLabel,detailLabel,downloadLabel,uploadLabel,connectionsLabel,versionLabel;
+  SoftButton power,proxyButton;ComboBox mode,groups;ListView subscriptions,nodes;TextBox search;RichTextBox logs;
+  TextBox corePath;NumericUpDown port,apiPort,updateHours;CheckBox trayClose,autoUpdate,dark,animations;
+  NotifyIcon tray;System.Windows.Forms.Timer timer;bool busy,polling,exitRequested,closing,updatingGroups,layoutReady;DateTime nextAuto=DateTime.MinValue;
+  readonly Queue<string> logLines=new Queue<string>();Dictionary<string,object> proxyData=new Dictionary<string,object>();
+  long lastDown,lastUp;DateTime lastSample=DateTime.MinValue;string version="—";
+  public MainForm(Store s,bool previewMode=false):this(s,previewMode,false){}
+  public MainForm(Store s,bool previewMode,bool startInTray){
+   SuspendLayout();AutoScaleDimensions=new SizeF(96,96);AutoScaleMode=AutoScaleMode.Dpi;
+   store=s;preview=previewMode;engine=new Engine(store);Theme.Dark=store.State.Dark;Motion.Enabled=store.State.Animations;
+   Text="Aurora Proxy";Font=Theme.Font(9);ClientSize=new Size(1100,Math.Min(720,Screen.PrimaryScreen.WorkingArea.Height-70));MinimumSize=new Size(960,660);StartPosition=FormStartPosition.CenterScreen;AutoScaleMode=AutoScaleMode.Dpi;
+   Icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath)??SystemIcons.Application;
+   BuildFrame();engine.Log+=AddLog;engine.Exited+=delegate{UI(delegate{RefreshState();AddLog("内核已退出，已尝试恢复系统代理。");});};
+   if(!preview){try{engine.Proxy.Restore();}catch(Exception ex){AddLog(ex.Message);}}
+   InitTray();ShowPage(0);timer=new System.Windows.Forms.Timer(){Interval=2000};timer.Tick+=delegate{Poll();AutoUpdate();};timer.Start();
+   if(startInTray&&!preview)Shown+=delegate{BeginInvoke((Action)delegate{Hide();});};
+   FormClosing+=OnClose;Resize+=delegate{if(WindowState==FormWindowState.Minimized&&store.State.MinimizeToTray&&!preview)Hide();};
+   AddLog("Aurora Proxy 已就绪。数据目录："+store.Root);if(!File.Exists(engine.CoreFile))AddLog("请在设置中选择 mihomo.exe，或放入程序的 core 文件夹。");
+   ResumeLayout(true);layoutReady=true;
+  }
+  void BuildFrame(){
+   var layout=new TableLayoutPanel(){Dock=DockStyle.Fill,ColumnCount=2,RowCount=1,Margin=new Padding(0)};layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,194));layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));Controls.Add(layout);
+   var sidebar=new Panel(){Dock=DockStyle.Fill,Padding=new Padding(18,25,18,16),Tag="sidebar"};layout.Controls.Add(sidebar,0,0);
+   var logo=new Logo(){Dock=DockStyle.Top};sidebar.Controls.Add(logo);
+   var navPanel=new FlowLayoutPanel(){Location=new Point(16,130),Size=new Size(165,350),FlowDirection=FlowDirection.TopDown,WrapContents=false,Tag="sidebar"};sidebar.Controls.Add(navPanel);
+   string[] names={"01   概览","02   订阅","03   节点","04   日志","05   设置","06   局域网","07   连接"};nav=new SoftButton[7];for(int i=0;i<7;i++){int n=i;nav[i]=new SoftButton(){Text=names[i],Navigation=true,Tone=new PaletteTone[]{PaletteTone.Blue,PaletteTone.Teal,PaletteTone.Violet,PaletteTone.Amber,PaletteTone.Blue,PaletteTone.Teal,PaletteTone.Violet}[i],Size=new Size(162,42),Margin=new Padding(0,0,0,8)};nav[i].Click+=delegate{if(!busy)ShowPage(n);};navPanel.Controls.Add(nav[i]);}
+   var bottom=new Panel(){Dock=DockStyle.Bottom,Height=100,Tag="sidebar"};sideState=Label("●  未连接",10);sideState.Location=new Point(2,16);sideState.AutoSize=true;bottom.Controls.Add(sideState);
+   var foot=Label("Windows 7+  ·  v1.1.8",8,true);foot.Location=new Point(2,57);bottom.Controls.Add(foot);sidebar.Controls.Add(bottom);
+   var main=new TableLayoutPanel(){Dock=DockStyle.Fill,Padding=new Padding(34,24,34,24),ColumnCount=1,RowCount=3};main.RowStyles.Add(new RowStyle(SizeType.Absolute,90));main.RowStyles.Add(new RowStyle(SizeType.Percent,100));main.RowStyles.Add(new RowStyle(SizeType.Absolute,30));layout.Controls.Add(main,1,0);
+   var head=new Panel(){Dock=DockStyle.Fill};title=Label("概览",23);title.Font=Theme.Font(23,FontStyle.Bold);subtitle=Label("连接状态与日常控制",9,true);subtitle.Location=new Point(2,50);head.Controls.Add(title);head.Controls.Add(subtitle);main.Controls.Add(head,0,0);
+   content=new TransitionPanel(){Dock=DockStyle.Fill};main.Controls.Add(content,0,1);activity=new ActivityIndicator(){Text="READY  /  就绪",Dock=DockStyle.Fill,Margin=new Padding(0)};main.Controls.Add(activity,0,2);Theme.Apply(this);
+  }
+  static Label Label(string text,float size=10,bool muted=false){return new Label(){Text=text,AutoSize=true,Font=Theme.Font(size),Tag=muted?"muted":null,BackColor=Color.Transparent,Margin=new Padding(0,0,0,10)};}
+  static SoftButton Button(string text,Action action,bool primary=false,int width=116){var b=new SoftButton(){Text=text,Primary=primary,Width=width,Tone=text=="删除"||text.StartsWith("断开")?PaletteTone.Amber:text.StartsWith("测试")?PaletteTone.Violet:PaletteTone.Neutral};b.Click+=delegate{action();};return b;}
+  static FlowLayoutPanel Row(){return new FlowLayoutPanel(){Dock=DockStyle.Top,Height=52,WrapContents=false,Margin=new Padding(0),Padding=new Padding(0)};}
+  static TableLayoutPanel Stack(){var t=new TableLayoutPanel(){Dock=DockStyle.Fill,ColumnCount=1,RowCount=0,Margin=new Padding(0)};t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));return t;}
+  static void Add(TableLayoutPanel t,Control c,int height){int i=t.RowCount++;t.RowStyles.Add(height<0?new RowStyle(SizeType.Percent,100):new RowStyle(SizeType.Absolute,height));c.Dock=DockStyle.Fill;t.Controls.Add(c,0,i);}
+  static ListView List(params string[] columns){var l=new StyledListView(){View=View.Details,FullRowSelect=true,MultiSelect=false,HideSelection=false,BorderStyle=BorderStyle.None,Font=Theme.Font(9),HeaderStyle=ColumnHeaderStyle.Nonclickable};foreach(string c in columns)l.Columns.Add(c,150);l.Resize+=delegate{if(l.Columns.Count>0){int used=0;for(int i=0;i<l.Columns.Count-1;i++)used+=l.Columns[i].Width;l.Columns[l.Columns.Count-1].Width=Math.Max(90,l.ClientSize.Width-used-2);}};return l;}
+  void ShowPage(int n){content.Cancel();content.SuspendLayout();page=n;foreach(Control c in content.Controls.Cast<Control>().ToArray())c.Dispose();content.Controls.Clear();stateLabel=null;subscriptions=null;nodes=null;logs=null;connections=null;networkStatus=null;lanAddressBox=null;
+   string[] titles={"概览","订阅管理","代理节点","运行日志","偏好设置","局域网共享","连接管理"};string[] hints={"少一些干扰，多一些从容。","导入、更新与切换你的配置。","选择策略组，找到适合当前网络的节点。","记录内核输出与操作结果。","为你的 Windows 7 调整连接与外观。","让同一网络的设备使用这台电脑的代理。","查看代理连接的来源、目标和流量。"};title.Text=titles[n];subtitle.Text=hints[n];
+   for(int i=0;i<nav.Length;i++){nav[i].Selected=i==n;nav[i].Invalidate();}
+   if(n==0)Overview();if(n==1)Subscriptions();if(n==2)Nodes();if(n==3)Logs();if(n==4)SettingsPage();if(n==5)NetworkPage();if(n==6)ConnectionsPage();
+   // Pages built after the form's first automatic scale need the same 96-DPI
+   // baseline as the initial frame. Never scale existing pages again.
+   if(layoutReady){var dpi=CurrentAutoScaleDimensions;var factor=new SizeF(dpi.Width/96f,dpi.Height/96f);if(factor.Width!=1||factor.Height!=1)foreach(Control c in content.Controls)c.Scale(factor);}
+   Theme.Apply(this);RefreshState();content.ResumeLayout(true);if(!preview)content.AnimateIn();
+   if(n==2&&engine.Running)RefreshNodes();if(n==6&&engine.Running)RefreshConnections();
+  }
+  void Overview(){
+   var stack=Stack();content.Controls.Add(stack);
+   var hero=new Surface(){Tone=PaletteTone.Blue,Margin=new Padding(0,0,0,18)};Add(stack,hero,188);
+   var overline=Label("CONNECTION",8,true);overline.Tag="blue";overline.Location=new Point(24,21);hero.Controls.Add(overline);
+   stateLabel=Label("尚未连接",25);stateLabel.Font=Theme.Font(25,FontStyle.Bold);stateLabel.Location=new Point(21,51);hero.Controls.Add(stateLabel);
+   detailLabel=Label("选择订阅，然后启动 mihomo 内核。",9,true);detailLabel.Location=new Point(25,101);hero.Controls.Add(detailLabel);
+   power=Button("启动内核",TogglePower,true,136);power.Anchor=AnchorStyles.Top|AnchorStyles.Right;power.Location=new Point(600,57);hero.Controls.Add(power);hero.Resize+=delegate{power.Location=new Point(hero.Width-164,59);detailLabel.MaximumSize=new Size(Math.Max(100,hero.Width-210),40);};
+   var badge=Label("LOCAL  /  127.0.0.1:"+store.State.Port,8,true);badge.Location=new Point(25,144);hero.Controls.Add(badge);
+   var metrics=new TableLayoutPanel(){ColumnCount=3,RowCount=1,Margin=new Padding(0,0,0,18)};for(int i=0;i<3;i++)metrics.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,33.33f));Add(stack,metrics,116);
+   downloadLabel=Metric(metrics,0,"下载速率","0 B/s",PaletteTone.Teal);uploadLabel=Metric(metrics,1,"上传速率","0 B/s",PaletteTone.Blue);connectionsLabel=Metric(metrics,2,"活跃连接","0",PaletteTone.Violet);
+   var options=new Surface(){Margin=new Padding(0,0,0,0)};Add(stack,options,-1);
+   var grid=new TableLayoutPanel(){Dock=DockStyle.Fill,ColumnCount=2,RowCount=4};grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,192));for(int i=0;i<4;i++)grid.RowStyles.Add(new RowStyle(SizeType.Percent,25));options.Controls.Add(grid);
+   grid.Controls.Add(Label("当前订阅",9,true),0,0);activeLabel=Label("未选择",11);activeLabel.Dock=DockStyle.Fill;activeLabel.AutoSize=false;activeLabel.AutoEllipsis=true;grid.Controls.Add(activeLabel,0,1);
+   var manage=Button("管理订阅",delegate{ShowPage(1);},false,136);grid.Controls.Add(manage,1,0);
+   grid.Controls.Add(Label("系统代理",10),0,2);proxyButton=Button("开启系统代理",ToggleProxy,false,168);grid.Controls.Add(proxyButton,1,2);
+   grid.Controls.Add(Label("路由模式",10),0,3);mode=new ComboBox(){DropDownStyle=ComboBoxStyle.DropDownList,Width=168,Font=Theme.Font(9)};mode.Items.AddRange(new object[]{"规则 · Rule","全局 · Global","直连 · Direct"});mode.SelectedIndex=store.State.Mode=="global"?1:(store.State.Mode=="direct"?2:0);mode.SelectedIndexChanged+=delegate{string m=new string[]{"rule","global","direct"}[mode.SelectedIndex];if(m!=store.State.Mode)Run(delegate{engine.ChangeMode(m);},delegate{AddLog("已切换路由模式："+m);});};grid.Controls.Add(Theme.Input(mode),1,3);
+  }
+  Label Metric(TableLayoutPanel t,int i,string name,string value,PaletteTone tone){var s=new Surface(){Tone=tone,Margin=new Padding(i==0?0:8,0,i==2?0:8,0)};t.Controls.Add(s,i,0);s.Dock=DockStyle.Fill;var h=Label(name,9,true);h.Location=new Point(21,18);s.Controls.Add(h);var v=Label(value,19);v.Tag=tone.ToString().ToLowerInvariant();v.Location=new Point(19,46);s.Controls.Add(v);return v;}
+  void Subscriptions(){var stack=Stack();content.Controls.Add(stack);var row=Row();row.Controls.Add(Button("＋ 添加订阅",ImportUrl,true,132));row.Controls.Add(Button("导入 YAML",ImportFile));row.Controls.Add(Button("更新全部",delegate{UpdateAll(false);},false,110));Add(stack,row,58);
+   var card=new Surface(){Padding=new Padding(14),Margin=new Padding(0,0,0,14)};subscriptions=List("名称","来源","上次更新","流量 / 到期");subscriptions.Dock=DockStyle.Fill;card.Controls.Add(subscriptions);Add(stack,card,-1);subscriptions.Columns[0].Width=180;subscriptions.Columns[1].Width=72;subscriptions.Columns[2].Width=155;subscriptions.Columns[3].Width=260;subscriptions.DoubleClick+=delegate{ActivateProfile();};
+   var actions=Row();actions.Controls.Add(Button("应用选中",ActivateProfile,true));actions.Controls.Add(Button("更新",UpdateSelected,false,80));actions.Controls.Add(Button("编辑",EditProfile,false,80));actions.Controls.Add(Button("删除",DeleteProfile,false,80));actions.Controls.Add(Button("打开配置",OpenProfile,false,110));Add(stack,actions,52);
+   var note=Label("支持 Clash / mihomo YAML；双击订阅应用。更新后自动重载正在使用的配置。",8,true);Add(stack,note,34);FillProfiles();
+  }
+  Subscription SelectedProfile(){if(subscriptions==null||subscriptions.SelectedItems.Count==0)throw new InvalidOperationException("请先选中一个订阅。");return (Subscription)subscriptions.SelectedItems[0].Tag;}
+  void FillProfiles(string selectId=null){if(subscriptions==null)return;subscriptions.Items.Clear();foreach(var s in store.State.Profiles){var item=new ListViewItem(new string[]{(store.State.Active==s.Id?"●  ":"")+s.Name,String.IsNullOrEmpty(s.Url)?"本地":"订阅",NiceDate(s.Updated),s.Usage??""}){Tag=s};subscriptions.Items.Add(item);if(s.Id==(selectId??store.State.Active))item.Selected=true;}}
+  static string NiceDate(string s){DateTime d;return DateTime.TryParse(s,out d)?d.ToLocalTime().ToString("MM-dd HH:mm"):s;}
+  void ImportUrl(){using(var dialog=new SubscriptionDialog(null,engine.Running)){if(dialog.ShowDialog(this)!=DialogResult.OK)return;string name=dialog.NameValue,url=dialog.UrlValue;bool proxy=dialog.ThroughProxy;Subscription created=null;Run(delegate{var result=Engine.Download(url,proxy,store.State.Port);engine.Validate(engine.Build(result.Yaml));created=new Subscription(){Name=name,Url=url,Usage=result.Usage,Updated=DateTime.UtcNow.ToString("o")};Store.Atomic(store.ProfilePath(created),result.Yaml);store.State.Profiles.Add(created);if(String.IsNullOrEmpty(store.State.Active))store.State.Active=created.Id;store.Save();},delegate{FillProfiles(created.Id);AddLog("已导入订阅："+name);});}}
+  void ImportFile(){using(var d=new OpenFileDialog(){Filter="YAML 配置|*.yaml;*.yml|所有文件|*.*",Title="导入 Clash / mihomo 配置"}){if(d.ShowDialog(this)!=DialogResult.OK)return;string path=d.FileName;Subscription created=null;Run(delegate{if(new FileInfo(path).Length>8*1024*1024)throw new IOException("文件超过 8 MiB。");string yaml=File.ReadAllText(path);engine.Validate(engine.Build(yaml));created=new Subscription(){Name=Path.GetFileNameWithoutExtension(path),Updated=DateTime.UtcNow.ToString("o"),Usage="本地配置"};Store.Atomic(store.ProfilePath(created),yaml);store.State.Profiles.Add(created);if(String.IsNullOrEmpty(store.State.Active))store.State.Active=created.Id;store.Save();},delegate{FillProfiles(created.Id);AddLog("已导入本地配置。");});}}
+  void ActivateProfile(){try{var s=SelectedProfile();Run(delegate{string yaml=File.ReadAllText(store.ProfilePath(s));engine.Apply(s,yaml);store.State.Active=s.Id;store.Save();},delegate{FillProfiles(s.Id);RefreshState();AddLog("当前订阅："+s.Name);});}catch(Exception ex){Error(ex);}}
+  void RefreshProfile(Subscription s,bool viaProxy){if(String.IsNullOrEmpty(s.Url))return;var result=Engine.Download(s.Url,viaProxy,store.State.Port);string old=File.ReadAllText(store.ProfilePath(s));bool active=engine.Running&&engine.ActiveId==s.Id;
+   if(active)engine.Apply(s,result.Yaml);else engine.Validate(engine.Build(result.Yaml));
+   try{Store.Atomic(store.ProfilePath(s),result.Yaml);}catch{if(active)engine.Apply(s,old);throw;}
+   s.Updated=DateTime.UtcNow.ToString("o");s.Usage=result.Usage;store.Save();AddLog("订阅已更新："+s.Name);
+  }
+  void UpdateSelected(){try{var s=SelectedProfile();if(String.IsNullOrEmpty(s.Url))throw new InvalidOperationException("本地配置没有订阅链接。请用“导入 YAML”导入新版文件，或编辑配置后重新应用。");bool via=false;using(var d=new DownloadDialog(engine.Running)){if(d.ShowDialog(this)!=DialogResult.OK)return;via=d.ThroughProxy;}Run(delegate{RefreshProfile(s,via);},delegate{FillProfiles(s.Id);});}catch(Exception ex){Error(ex);}}
+  void UpdateAll(bool automatic){if(busy)return;bool via=false;if(!automatic){using(var d=new DownloadDialog(engine.Running)){if(d.ShowDialog(this)!=DialogResult.OK)return;via=d.ThroughProxy;}}var list=store.State.Profiles.Where(x=>!String.IsNullOrEmpty(x.Url)).ToArray();Run(delegate{int failures=0;foreach(var s in list){if(automatic){DateTime last;if(DateTime.TryParse(s.Updated,out last)&&(DateTime.UtcNow-last.ToUniversalTime()).TotalHours<store.State.UpdateHours)continue;}try{RefreshProfile(s,via);}catch(Exception ex){failures++;AddLog("更新失败 ["+s.Name+"]："+ex.Message);}}if(failures>0&&!automatic)throw new IOException(failures+" 个订阅更新失败，详情见日志；原配置已保留。");},delegate{FillProfiles();});}
+  void AutoUpdate(){if(!store.State.UpdateAutomatically||busy||DateTime.UtcNow<nextAuto)return;nextAuto=DateTime.UtcNow.AddMinutes(30);UpdateAll(true);}
+  void EditProfile(){try{var s=SelectedProfile();using(var d=new SubscriptionDialog(s,engine.Running)){if(d.ShowDialog(this)!=DialogResult.OK)return;string name=d.NameValue,url=d.UrlValue;bool via=d.ThroughProxy;Run(delegate{if(url!=s.Url&&!String.IsNullOrWhiteSpace(url)){var result=Engine.Download(url,via,store.State.Port);string old=File.ReadAllText(store.ProfilePath(s));bool active=engine.Running&&engine.ActiveId==s.Id;if(active)engine.Apply(s,result.Yaml);else engine.Validate(engine.Build(result.Yaml));try{Store.Atomic(store.ProfilePath(s),result.Yaml);}catch{if(active)engine.Apply(s,old);throw;}s.Updated=DateTime.UtcNow.ToString("o");s.Usage=result.Usage;}s.Name=name;s.Url=url;store.Save();},delegate{FillProfiles(s.Id);});}}catch(Exception ex){Error(ex);}}
+  void DeleteProfile(){try{var s=SelectedProfile();if(engine.Running&&engine.ActiveId==s.Id)throw new InvalidOperationException("请先停止内核或切换到其他订阅，再删除正在使用的配置。");if(MessageBox.Show(this,"删除订阅“"+s.Name+"”？","删除订阅",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;Run(delegate{store.State.Profiles.Remove(s);if(store.State.Active==s.Id)store.State.Active=store.State.Profiles.Count>0?store.State.Profiles[0].Id:"";store.Save();File.Delete(store.ProfilePath(s));},delegate{FillProfiles();});}catch(Exception ex){Error(ex);}}
+  void OpenProfile(){try{var s=SelectedProfile();Process.Start(new ProcessStartInfo("notepad.exe","\""+store.ProfilePath(s)+"\""){UseShellExecute=true});}catch(Exception ex){Error(ex);}}
+  void Nodes(){var stack=Stack();content.Controls.Add(stack);var row=Row();groups=new NoWheelComboBox(){DropDownStyle=ComboBoxStyle.DropDownList,Width=230,Font=Theme.Font(10),Margin=new Padding(0,4,14,0)};groups.SelectedIndexChanged+=delegate{if(!updatingGroups)FillNodes();};row.Controls.Add(Theme.Input(groups,36));search=new TextBox(){Width=185,Font=Theme.Font(10),Margin=new Padding(0,4,14,0)};search.TextChanged+=delegate{FillNodes();};row.Controls.Add(Theme.Input(search,36));row.Controls.Add(Button("刷新",RefreshNodes,false,80));Add(stack,row,58);
+   var card=new Surface(){Padding=new Padding(14),Margin=new Padding(0,0,0,14)};nodes=List("节点名称","协议类型","延迟","状态");nodes.Columns[0].Width=350;nodes.Columns[1].Width=145;nodes.Columns[2].Width=90;nodes.Columns[3].Width=90;nodes.Dock=DockStyle.Fill;nodes.DoubleClick+=delegate{SelectNode();};card.Controls.Add(nodes);Add(stack,card,-1);
+   var actions=Row();actions.Controls.Add(Button("使用选中节点",SelectNode,true,145));actions.Controls.Add(Button("测试选中",TestNode,false,116));actions.Controls.Add(Button("测试整组",TestGroup,false,116));Add(stack,actions,52);Add(stack,Label("右侧输入框可搜索节点。延迟结果来自内核；自动策略组可固定选择节点。",8,true),34);FillGroups();}
+  static Dictionary<string,object> Dict(object o){return o as Dictionary<string,object>??new Dictionary<string,object>();}
+  static string Str(Dictionary<string,object> d,string key){object o;return d.TryGetValue(key,out o)&&o!=null?o.ToString():"";}
+  static IEnumerable<object> ArrayOf(object o){var a=o as IEnumerable;if(a!=null&&!(o is string)){foreach(var v in a)yield return v;}}
+  void RefreshNodes(){if(!engine.Running){Error(new InvalidOperationException("请先启动 mihomo 内核。"));return;}Dictionary<string,object> data=null;Run(delegate{data=Dict(engine.Api("GET","/proxies",null)["proxies"]);},delegate{proxyData=data;FillGroups();});}
+  void FillGroups(){if(groups==null||groups.IsDisposed)return;string old=groups.SelectedItem as string;var names=proxyData.OrderBy(x=>x.Key).Where(x=>Dict(x.Value).ContainsKey("all")).Select(x=>x.Key).ToArray();
+   // Refreshing data is not a user category change. Avoid intermediate empty
+   // selections firing FillNodes and destroying the current list position.
+   updatingGroups=true;groups.BeginUpdate();try{if(!groups.Items.Cast<string>().SequenceEqual(names)){groups.Items.Clear();groups.Items.AddRange(names);}if(groups.Items.Count>0)groups.SelectedIndex=old!=null&&groups.Items.Contains(old)?groups.Items.IndexOf(old):0;}finally{groups.EndUpdate();updatingGroups=false;}
+   FillNodes(old!=null&&(groups.SelectedItem as string)==old);
+  }
+  void FillNodes(){FillNodes(false);}
+  void FillNodes(bool preserve){if(nodes==null||groups==null||nodes.IsDisposed||groups.IsDisposed)return;string g=groups.SelectedItem as string;var values=new List<string[]>();
+   if(g!=null&&proxyData.ContainsKey(g)){var group=Dict(proxyData[g]);object all;if(group.TryGetValue("all",out all))foreach(var o in ArrayOf(all)){string name=o.ToString();if(!String.IsNullOrEmpty(search.Text)&&name.IndexOf(search.Text,StringComparison.OrdinalIgnoreCase)<0)continue;var d=proxyData.ContainsKey(name)?Dict(proxyData[name]):new Dictionary<string,object>();string delay="未测试";object h;if(d.TryGetValue("history",out h)){var history=ArrayOf(h).ToArray();if(history.Length>0){string v=Str(Dict(history[history.Length-1]),"delay");delay=v=="0"?"超时":v+" ms";}}values.Add(new string[]{name,Str(d,"type"),delay,Str(group,"now")==name?"使用中":""});}}
+   if(preserve&&nodes.Items.Cast<ListViewItem>().Select(x=>x.Tag as string).SequenceEqual(values.Select(x=>x[0]))){
+    // Latency tests normally change history only. Keep every row object,
+    // native scroll offset, selection and focus; update changed cells only.
+    for(int i=0;i<values.Count;i++)for(int column=1;column<4;column++)if(nodes.Items[i].SubItems[column].Text!=values[i][column])nodes.Items[i].SubItems[column].Text=values[i][column];return;
+   }
+   var top=preserve&&nodes.Items.Count>0?nodes.TopItem:null;int topIndex=top==null?0:top.Index;string topName=top==null?null:top.Tag as string;
+   string selected=preserve&&nodes.SelectedItems.Count>0?nodes.SelectedItems[0].Tag as string:null,focused=preserve&&nodes.FocusedItem!=null?nodes.FocusedItem.Tag as string:null;
+   nodes.BeginUpdate();try{nodes.Items.Clear();foreach(var row in values){var item=new ListViewItem(row){Tag=row[0]};nodes.Items.Add(item);if(selected!=null&&row[0]==selected)item.Selected=true;if(focused!=null&&row[0]==focused)item.Focused=true;}}finally{nodes.EndUpdate();}
+   if(preserve&&nodes.Items.Count>0){var restored=nodes.Items.Cast<ListViewItem>().FirstOrDefault(x=>(x.Tag as string)==topName);nodes.TopItem=restored??nodes.Items[Math.Min(topIndex,nodes.Items.Count-1)];}
+  }
+  string SelectedNode(){if(nodes==null||nodes.SelectedItems.Count==0)throw new InvalidOperationException("请先选中一个节点。");return nodes.SelectedItems[0].Tag.ToString();}
+  void MarkSelectedNode(string groupName,string nodeName){
+   // A successful PUT changes only this group's choice. Update the existing
+   // rows instead of clearing the groups and list, which resets scrolling.
+   if(proxyData.ContainsKey(groupName))Dict(proxyData[groupName])["now"]=nodeName;
+   if(nodes==null||nodes.IsDisposed||groups==null||groups.IsDisposed||(groups.SelectedItem as string)!=groupName)return;
+   foreach(ListViewItem item in nodes.Items){string state=(item.Tag as string)==nodeName?"使用中":"";if(item.SubItems[3].Text!=state)item.SubItems[3].Text=state;}
+  }
+  void SelectNode(){try{if(!engine.Running)throw new InvalidOperationException("请先启动内核。");string g=groups.SelectedItem as string,n=SelectedNode();if(g==null)throw new InvalidOperationException("请选择策略组。");var d=Dict(proxyData[g]);string type=Str(d,"type");if(type!="Selector"&&type!="URLTest"&&type!="Fallback")throw new InvalidOperationException("该策略组不支持手动固定节点，请选择 Selector / URLTest / Fallback 组。");Run(delegate{engine.Api("PUT","/proxies/"+Uri.EscapeDataString(g),new Dictionary<string,object>{{"name",n}});},delegate{MarkSelectedNode(g,n);AddLog("已选择节点："+n);});}catch(Exception ex){Error(ex);}}
+  const string TestUrl="https://www.gstatic.com/generate_204";
+  void TestNode(){try{if(!engine.Running)throw new InvalidOperationException("请先启动内核。");string n=SelectedNode();Run(delegate{var r=engine.Api("GET","/proxies/"+Uri.EscapeDataString(n)+"/delay?timeout=5000&url="+Uri.EscapeDataString(TestUrl),null,7000);AddLog(n+" · "+Str(r,"delay")+" ms");},RefreshNodes);}catch(Exception ex){Error(ex);}}
+  void TestGroup(){try{if(!engine.Running)throw new InvalidOperationException("请先启动内核。");string g=groups.SelectedItem as string;if(g==null)throw new InvalidOperationException("请选择策略组。");Run(delegate{engine.Api("GET","/group/"+Uri.EscapeDataString(g)+"/delay?timeout=5000&url="+Uri.EscapeDataString(TestUrl),null,30000);},RefreshNodes);}catch(Exception ex){Error(ex);}}
+  void Logs(){var stack=Stack();content.Controls.Add(stack);var row=Row();row.Controls.Add(Button("清空日志",delegate{logLines.Clear();logs.Clear();}));row.Controls.Add(Button("导出日志",ExportLogs));Add(stack,row,58);var card=new Surface(){Padding=new Padding(15)};logs=new RichTextBox(){Dock=DockStyle.Fill,ReadOnly=true,BorderStyle=BorderStyle.None,Font=new Font("Consolas",10),WordWrap=false,DetectUrls=false};card.Controls.Add(logs);Add(stack,card,-1);logs.Text=String.Join(Environment.NewLine,logLines.ToArray());logs.SelectionStart=logs.TextLength;logs.ScrollToCaret();}
+  void ExportLogs(){using(var d=new SaveFileDialog(){Filter="日志文件|*.log",FileName="aurora-"+DateTime.Now.ToString("yyyyMMdd-HHmm")+".log"}){if(d.ShowDialog(this)==DialogResult.OK){try{File.WriteAllText(d.FileName,String.Join(Environment.NewLine,logLines.ToArray()),Encoding.UTF8);}catch(Exception ex){Error(ex);}}}}
+  void SettingsPage(){var stack=Stack();content.Controls.Add(stack);var card=new Surface(){Margin=new Padding(0,0,0,14)};Add(stack,card,-1);
+   card.AutoScroll=true;var grid=new TableLayoutPanel(){Dock=DockStyle.Top,Height=385,ColumnCount=3,RowCount=11};grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,134));grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,108));for(int i=0;i<10;i++)grid.RowStyles.Add(new RowStyle(SizeType.Absolute,34));grid.RowStyles.Add(new RowStyle(SizeType.Percent,100));card.Controls.Add(grid);
+   AddSetting(grid,0,"mihomo 内核",corePath=new TextBox(){Text=store.State.CorePath,Width=330});grid.Controls.Add(Button("选择文件",ChooseCore,false,98),2,0);
+   AddSetting(grid,1,"本地代理端口",port=new NumericUpDown(){Minimum=1024,Maximum=65535,Value=store.State.Port,Width=130});
+   AddSetting(grid,2,"控制接口端口",apiPort=new NumericUpDown(){Minimum=1024,Maximum=65535,Value=store.State.ApiPort,Width=130});
+   AddSetting(grid,3,"外观",dark=new SoftCheckBox(){Text="深色主题",Checked=store.State.Dark,AutoSize=true});
+   AddSetting(grid,4,"窗口行为",trayClose=new SoftCheckBox(){Text="关闭 / 最小化时收进托盘",Checked=store.State.MinimizeToTray,AutoSize=true});
+   AddSetting(grid,5,"订阅更新",autoUpdate=new SoftCheckBox(){Text="客户端运行期间定时更新（直连下载）",Checked=store.State.UpdateAutomatically,AutoSize=true});
+   AddSetting(grid,6,"更新间隔 / 小时",updateHours=new NumericUpDown(){Minimum=1,Maximum=720,Value=store.State.UpdateHours,Width=130});
+   AddSetting(grid,7,"内核版本",versionLabel=Label(version,9,true));grid.Controls.Add(Button("检查版本",CheckVersion,false,98),2,7);
+   AddSetting(grid,8,"动画效果",animations=new SoftCheckBox(){Text="启用轻量动效（悬停、按下、页面切换）",Checked=store.State.Animations,AutoSize=true});
+   AddSetting(grid,9,"开机启动",startup=new SoftCheckBox(){Text="登录 Windows 后在托盘启动客户端",Checked=store.State.StartWithWindows,AutoSize=true});
+   var note=Label("内核与端口修改需先停止连接。留空内核路径使用 core\\mihomo.exe。",8,true);note.MaximumSize=new Size(520,45);grid.Controls.Add(note,0,10);grid.SetColumnSpan(note,3);
+   AlignSettingRows(grid);
+   var actions=Row();actions.Controls.Add(Button("保存设置",SaveSettings,true));actions.Controls.Add(Button("打开数据目录",delegate{try{Process.Start(store.Root);}catch(Exception ex){Error(ex);}},false,145));actions.Controls.Add(Button("内核下载页",delegate{try{Process.Start("https://github.com/MetaCubeX/mihomo/releases");}catch(Exception ex){Error(ex);}},false,126));Add(stack,actions,52);
+   var detail=Label("系统代理仅作用于遵循 Windows 代理设置的应用；本版使用 HTTP / SOCKS 混合端口。",8,true);detail.MaximumSize=new Size(750,40);Add(stack,detail,40);
+  }
+  void AddSetting(TableLayoutPanel grid,int row,string name,Control c){var l=Label(name,9,true);grid.Controls.Add(l,0,row);grid.Controls.Add(c is TextBox||c is NumericUpDown?Theme.Input(c,30):(Control)c,1,row);}
+  static void AlignSettingRows(TableLayoutPanel grid){foreach(Control c in grid.Controls){if(grid.GetColumnSpan(c)>1&&c is Label)continue;c.Anchor=AnchorStyles.Left;c.Margin=new Padding(0,0,10,0);if(c is SoftButton)c.Height=30;}}
+  void ChooseCore(){using(var d=new OpenFileDialog(){Filter="mihomo 内核|*.exe|所有文件|*.*"}){if(d.ShowDialog(this)==DialogResult.OK)corePath.Text=d.FileName;}}
+  void SaveSettings(){try{string path=corePath.Text.Trim();int p=(int)port.Value,a=(int)apiPort.Value;if(p==a)throw new ArgumentException("本地代理端口和控制端口不能相同。");if(engine.Running&&(path!=store.State.CorePath||p!=store.State.Port||a!=store.State.ApiPort))throw new InvalidOperationException("请先停止内核，再修改内核路径或端口。");if(path!=""&&!File.Exists(path))throw new FileNotFoundException("选择的内核文件不存在。");bool previousStartup=store.State.StartWithWindows;store.State.StartWithWindows=startup.Checked;
+   store.State.CorePath=path;store.State.Port=p;store.State.ApiPort=a;store.State.Dark=dark.Checked;store.State.MinimizeToTray=trayClose.Checked;store.State.UpdateAutomatically=autoUpdate.Checked;store.State.UpdateHours=(int)updateHours.Value;store.State.Animations=animations.Checked;store.Save();if(!preview&&startup.Checked!=previousStartup){try{Startup.SetEnabled(startup.Checked,Application.ExecutablePath);}catch{store.State.StartWithWindows=previousStartup;store.Save();throw;}}Theme.Dark=store.State.Dark;Motion.Enabled=store.State.Animations;Theme.Apply(this);AddLog("设置已保存。");activity.Text="SAVED  /  设置已保存";}catch(Exception ex){Error(ex);}}
+  void CheckVersion(){string result=null;Run(delegate{if(!File.Exists(engine.CoreFile))throw new FileNotFoundException("请先选择内核并保存设置。");using(var p=new Process()){p.StartInfo=new ProcessStartInfo(engine.CoreFile,"-v"){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true};p.Start();var sb=new StringBuilder();p.OutputDataReceived+=delegate(object o,System.Diagnostics.DataReceivedEventArgs e){if(e.Data!=null)sb.AppendLine(e.Data);};p.BeginOutputReadLine();if(!p.WaitForExit(5000)){p.Kill();throw new TimeoutException("内核版本检查超时。");}p.WaitForExit();if(p.ExitCode!=0)throw new IOException("内核无法正常运行，退出码："+p.ExitCode);result=sb.ToString().Trim();}},delegate{version=result;if(versionLabel!=null&&!versionLabel.IsDisposed){versionLabel.MaximumSize=new Size(390,46);versionLabel.Text=result;}AddLog(result);});}
+  void TogglePower(){if(preview)return;if(engine.Running)Run(engine.Stop,delegate{AddLog("内核已停止。");RefreshState();});else Run(delegate{engine.Start(store.Active);},delegate{RefreshState();});}
+  void ToggleProxy(){if(preview)return;if(!engine.Running){Error(new InvalidOperationException("请先启动内核，再开启系统代理。"));return;}Run(engine.ToggleSystemProxy,RefreshState);}
+  void RefreshState(){bool running=engine.Running;sideState.Text=running?"●  内核运行中":"●  未连接";sideState.ForeColor=running?Theme.Accent:Theme.Muted;
+   UpdateNetworkStatus();if(!running&&connections!=null&&!connections.IsDisposed)FillConnections(new Dictionary<string,object>());
+   if(page!=0||stateLabel==null)return;stateLabel.Text=running?"连接已就绪":"尚未连接";power.Text=running?"停止内核":"启动内核";power.Invalidate();
+   activeLabel.Text=store.Active==null?"未选择订阅":store.Active.Name;proxyButton.Text=engine.Proxy.Owned?"关闭系统代理":"开启系统代理";proxyButton.Primary=engine.Proxy.Owned;proxyButton.Invalidate();
+   detailLabel.Text=running?(engine.Proxy.Owned?"系统代理已开启，应用可通过本地端口连接。":"内核正在运行；可开启系统代理或手动配置应用。"):(File.Exists(engine.CoreFile)?"导入订阅后，启动内核并开启系统代理。":"还缺少 mihomo 内核，请前往设置选择文件。");
+   if(!running){downloadLabel.Text="0 B/s";uploadLabel.Text="0 B/s";connectionsLabel.Text="0";}
+  }
+  void Poll(){RefreshState();if(!engine.Running||polling||busy||preview)return;polling=true;ThreadPool.QueueUserWorkItem(delegate{try{var r=engine.Api("GET","/connections",null,1500);long d=Convert.ToInt64(r["downloadTotal"]),u=Convert.ToInt64(r["uploadTotal"]);object list;int count=r.TryGetValue("connections",out list)?ArrayOf(list).Count():0;DateTime now=DateTime.UtcNow;double elapsed=(now-lastSample).TotalSeconds;double down=lastSample==DateTime.MinValue?0:Math.Max(0,d-lastDown)/Math.Max(.1,elapsed),up=lastSample==DateTime.MinValue?0:Math.Max(0,u-lastUp)/Math.Max(.1,elapsed);lastSample=now;lastDown=d;lastUp=u;UI(delegate{if(page==0&&stateLabel!=null){downloadLabel.Text=Engine.Bytes(down)+"/s";uploadLabel.Text=Engine.Bytes(up)+"/s";connectionsLabel.Text=count.ToString();}if(page==6&&connections!=null&&!connections.IsDisposed)FillConnections(r);});}catch{}finally{polling=false;}});}
+  void Run(Action work,Action done=null){if(busy||closing)return;busy=true;content.Enabled=false;foreach(var b in nav)b.Enabled=false;activity.Busy=true;activity.Text="正在处理，请稍候…";ThreadPool.QueueUserWorkItem(delegate{Exception error=null;try{work();}catch(Exception ex){error=ex;}UI(delegate{busy=false;content.Enabled=true;foreach(var b in nav)b.Enabled=true;activity.Busy=false;activity.Text=error==null?"READY  /  就绪":"ERROR  /  操作未完成";if(error!=null){if(page==1)FillProfiles();Error(error);}else if(done!=null){try{done();}catch(Exception ex){Error(ex);}}RefreshState();if(exitRequested)ExitApp();});});}
+  void UI(Action action){if(IsDisposed||Disposing)return;try{if(InvokeRequired)BeginInvoke(action);else action();}catch(InvalidOperationException){}}
+  void AddLog(string s){UI(delegate{string line=DateTime.Now.ToString("HH:mm:ss")+"  "+Redact(s);logLines.Enqueue(line);while(logLines.Count>1000)logLines.Dequeue();if(logs!=null&&!logs.IsDisposed){logs.Text=String.Join(Environment.NewLine,logLines.ToArray());logs.SelectionStart=logs.TextLength;logs.ScrollToCaret();}});}
+  string Redact(string s){return System.Text.RegularExpressions.Regex.Replace(s,@"https?://[^\s\""'<>]+", "[URL]");}
+  void Error(Exception ex){AddLog(ex.Message);MessageBox.Show(this,ex.Message,"Aurora Proxy",MessageBoxButtons.OK,MessageBoxIcon.Information);}
+  void InitTray(){var menu=new ContextMenuStrip();menu.Items.Add("打开 Aurora",null,delegate{Show();WindowState=FormWindowState.Normal;Activate();});menu.Items.Add("启动 / 停止内核",null,delegate{TogglePower();});menu.Items.Add("恢复系统代理",null,delegate{Run(engine.Proxy.Restore,RefreshState);});menu.Items.Add(new ToolStripSeparator());menu.Items.Add("退出",null,delegate{ExitApp();});tray=new NotifyIcon(){Icon=Icon,Text="Aurora Proxy",ContextMenuStrip=menu,Visible=!preview};tray.DoubleClick+=delegate{Show();WindowState=FormWindowState.Normal;Activate();};}
+  void ExitApp(){if(busy){exitRequested=true;activity.Text="WAITING  /  当前操作完成后退出";return;}try{engine.Stop();}catch(Exception ex){Error(ex);}closing=true;Close();}
+  void OnClose(object sender,FormClosingEventArgs e){if(!closing&&e.CloseReason==CloseReason.UserClosing&&store.State.MinimizeToTray&&!preview){e.Cancel=true;Hide();return;}if(busy&&!closing){e.Cancel=true;exitRequested=true;return;}timer.Stop();timer.Dispose();try{engine.Stop();}catch(Exception ex){AddLog(ex.Message);}tray.Visible=false;tray.Dispose();closing=true;}
+  public void PreviewPage(int pageNumber){ShowPage(pageNumber);}
+  public void CapturePage(string path,int pageNumber){PerformLayout();Refresh();Application.DoEvents();using(var b=new Bitmap(ClientSize.Width,ClientSize.Height)){using(var g=Graphics.FromImage(b))g.CopyFromScreen(PointToScreen(Point.Empty),Point.Empty,ClientSize);b.Save(path,System.Drawing.Imaging.ImageFormat.Png);}}
+ }
+}

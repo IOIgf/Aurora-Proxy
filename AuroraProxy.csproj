@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+ <PropertyGroup><Configuration Condition="'$(Configuration)' == ''">Release</Configuration><Platform Condition="'$(Platform)' == ''">AnyCPU</Platform><OutputType>WinExe</OutputType><RootNamespace>AuroraProxy</RootNamespace><AssemblyName>AuroraProxy</AssemblyName><TargetFrameworkVersion>v4.0</TargetFrameworkVersion><PlatformTarget>AnyCPU</PlatformTarget><OutputPath>bin\$(Configuration)\</OutputPath><Optimize>true</Optimize><ApplicationIcon>aurora.ico</ApplicationIcon><ApplicationManifest>app.manifest</ApplicationManifest></PropertyGroup>
+ <ItemGroup><Reference Include="System"/><Reference Include="System.Core"/><Reference Include="System.Drawing"/><Reference Include="System.Windows.Forms"/><Reference Include="System.Web.Extensions"/><Reference Include="System.Security"/><Reference Include="Accessibility"/></ItemGroup>
+ <ItemGroup><Compile Include="src\Model.cs"/><Compile Include="src\Engine.cs"/><Compile Include="src\SystemProxy.cs"/><Compile Include="src\Theme.cs"/><Compile Include="src\Inputs.cs"/><Compile Include="src\SoftCheckBox.cs"/><Compile Include="src\MainForm.cs"/><Compile Include="src\Dialogs.cs"/><Compile Include="src\Program.cs"/><Compile Include="src\Networking.cs"/><Compile Include="src\MainForm.Network.cs"/></ItemGroup>
+ <ItemGroup><None Include="AuroraProxy.exe.config"><Link>App.config</Link><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></None></ItemGroup>
+ <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets"/>
+</Project>
