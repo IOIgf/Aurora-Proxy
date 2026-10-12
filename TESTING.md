@@ -3,7 +3,7 @@
 - 新增 AuditCoreTests：全局模式实际 HTTP 出口、合法 YAML 写法、持久化失败回退、连接保留、异常退出与销毁后的行为。
 - 新增 AuditUiTests：实际模式切换控件、GLOBAL 分类引导、订阅缓存 / 内核回退、导入回退、日志批量刷新和窗口销毁清理。
 - 新增 SystemProxyTests：Windows WinInet 真实代理设置、恢复与外部修改；测试结束恢复原设置。
-- 本地真实 Linux mihomo 和 Mono 界面回归通过；Windows 原生检查由 main 与标签构建执行。Win7 实机的显示驱动、系统 TLS 更新及外部服务商节点连通性仍需实机验证。
+- 本地真实 Linux mihomo 和 Mono 界面回归通过；[Windows Server 2022 完整构建检查](https://github.com/IOIgf/Aurora-Proxy/actions/runs/38192909196)已通过 18 套检查，共 479 项断言及 28 次连续切页 / 缩放。Win7 实机的显示驱动、系统 TLS 更新及外部服务商节点连通性仍需实机验证。
 
 ## 1.1.10 验证
 

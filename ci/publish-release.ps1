@@ -33,7 +33,7 @@ Windows 7 原生 mihomo 客户端，使用 .NET Framework 4.0 API / C# 4。
 - 下载 ``$($release.package_name).zip`` 并完整解压，再运行 ``AuroraProxy.exe``。
 - 包含 mihomo v1.19.32 / windows-amd64-v1-go120 内核、源码、说明及许可证。
 - Windows 7 SP1 推荐安装 .NET Framework 4.8。
-- 已在 Windows Server 2022 构建环境通过勾选框缓冲区回归和真实内核接口检查；不等同于 Windows 7 实机验收。
+- 已在 Windows Server 2022 构建环境通过 18 套系统代理、全局实际出口、订阅回退、局域网认证和界面回归检查；不等同于 Windows 7 实机验收。
 - 用同名 ``.sha256`` 文件校验 ZIP；包内 ``SHA256SUMS.txt`` 校验各文件。
 "@
     [IO.File]::WriteAllText($notesPath, $notes, [Text.UTF8Encoding]::new($false))
