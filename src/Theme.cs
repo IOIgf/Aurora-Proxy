@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
@@ -169,10 +170,12 @@ namespace AuroraProxy {
  // dialog button bars) would be enlarged a second time and drift out of its
  // row. Children already size themselves from the scaled page font, so keep
  // their design-time bounds and let the flow layout reposition them.
+ // NOTE: OnLayoutCompleted is protected-internal in .NET Framework 4.0 and
+ // cannot be overridden here; remember sizes whenever layout runs instead.
  public class BufferedFlowLayoutPanel:FlowLayoutPanel {
   readonly Dictionary<Control,Size> designSizes=new Dictionary<Control,Size>();
   public BufferedFlowLayoutPanel(){DoubleBuffered=true;SetStyle(ControlStyles.ResizeRedraw,true);}
-  protected override void OnLayoutCompleted(LayoutEventArgs levent){base.OnLayoutCompleted(levent);RememberDesignSizes();}
+  protected override void OnLayout(LayoutEventArgs levent){base.OnLayout(levent);RememberDesignSizes();}
   protected override bool ScaleChildren {get{RestoreDesignSizes();return false;}}
   // Layout passes that enlarge AutoScrollMinSize (e.g. a scrollbar appearing)
   // shrink Dock=Fill children; restore the heights this container owns.
