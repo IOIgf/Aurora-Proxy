@@ -16,7 +16,17 @@ namespace AuroraProxy {
   public event Action<string> Log;public event Action Exited;
   volatile bool disposed;volatile Process process;ChildJob job;string activeRuntime;int generation;public int Generation {get{return Thread.VolatileRead(ref generation);}}readonly object sync=new object();string secret;int apiPort;public string ActiveId{get;private set;}
   public Engine(Store s){Store=s;Proxy=new SystemProxy(s.Root);secret=Guid.NewGuid().ToString("N")+Guid.NewGuid().ToString("N");}
+  // mihomo writes its file log to <working directory>\mihomo.log; the tray tail viewer follows this file.
+  public string CoreLogFile {get{return Path.Combine(Store.Work,"mihomo.log");}}
   public bool Running {get{var p=process;try{return p!=null&&!p.HasExited;}catch{return false;}}}
+  // Bundled kernel identity comes from the "Pinned bundled kernel:" marker in core\README.txt,
+  // so the UI never hardcodes the pinned version and updates when the bundle is refreshed.
+  public string BundledCoreVersion(){
+   try{string readme=Path.Combine(Path.GetDirectoryName(CoreFile),"README.txt");if(!File.Exists(readme))return "";
+    foreach(string line in File.ReadAllLines(readme)){int at=line.IndexOf("Pinned bundled kernel:",StringComparison.OrdinalIgnoreCase);if(at<0)continue;
+     Match m=Regex.Match(line.Substring(at),@"v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?");if(m.Success)return m.Value;}
+   }catch{}return "";
+  }
   public string CoreFile {get{string p=Store.State.CorePath;if(String.IsNullOrWhiteSpace(p))p=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"core","mihomo.exe");return Path.GetFullPath(p);}}
   void Emit(string s){var e=Log;if(e!=null)e(s);}
   static string Quote(string s){return "\""+s.Replace("\"","")+"\"";}

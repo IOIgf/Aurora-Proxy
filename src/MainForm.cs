@@ -31,7 +31,9 @@ namespace AuroraProxy {
    InitTray();ShowPage(0);timer=new System.Windows.Forms.Timer(){Interval=2000};timer.Tick+=delegate{Poll();AutoUpdate();};timer.Start();
    if(startInTray&&!preview)Shown+=delegate{BeginInvoke((Action)delegate{Hide();});};
    FormClosing+=OnClose;Resize+=delegate{if(WindowState==FormWindowState.Minimized&&store.State.MinimizeToTray&&!preview)Hide();};
-   AddLog("Aurora Proxy 已就绪。数据目录："+store.Root);if(!File.Exists(engine.CoreFile))AddLog("请在设置中选择 mihomo.exe，或放入程序的 core 文件夹。");
+   AddLog("Aurora Proxy 已就绪。数据目录："+store.Root);
+   if(!File.Exists(engine.CoreFile))AddLog("请在设置中选择 mihomo.exe，或放入程序的 core 文件夹。");
+   else{string bundled=engine.BundledCoreVersion();if(bundled!="")AddLog("安装包内置内核版本："+bundled+"；“检查版本”显示当前实际使用的内核。");}
    ResumeLayout(true);layoutReady=true;
   }
   void BuildFrame(){
@@ -157,6 +159,8 @@ namespace AuroraProxy {
    AddSetting(grid,5,"订阅更新",autoUpdate=new SoftCheckBox(){Text="客户端运行期间定时更新（直连下载）",Checked=store.State.UpdateAutomatically,AutoSize=true});
    AddSetting(grid,6,"更新间隔 / 小时",updateHours=new NumericUpDown(){Minimum=1,Maximum=720,Value=store.State.UpdateHours,Width=130});
    AddSetting(grid,7,"内核版本",versionLabel=Label(version,9,true));grid.Controls.Add(Button("检查版本",CheckVersion,false,98),2,7);
+   string bundledCore=engine.BundledCoreVersion();
+   if(bundledCore!=""){var bundledNote=Label("安装包内置 "+bundledCore+"；替换 core\\mihomo.exe 后更新此提示。",8,true);bundledNote.MaximumSize=new Size(520,45);grid.Controls.Add(bundledNote,1,7);grid.SetColumnSpan(bundledNote,2);}
    AddSetting(grid,8,"动画效果",animations=new SoftCheckBox(){Text="启用轻量动效（悬停、按下、勾选）",Checked=store.State.Animations,AutoSize=true});
    AddSetting(grid,9,"开机启动",startup=new SoftCheckBox(){Text="登录 Windows 后在托盘启动客户端",Checked=store.State.StartWithWindows,AutoSize=true});
    var note=Label("内核与端口修改需先停止连接。留空内核路径使用 core\\mihomo.exe。",8,true);note.MaximumSize=new Size(520,45);grid.Controls.Add(note,0,10);grid.SetColumnSpan(note,3);
@@ -187,7 +191,8 @@ namespace AuroraProxy {
   void FlushLogs(){string[] batch;lock(logGate){if(pendingLogs.Count==0)return;batch=pendingLogs.ToArray();pendingLogs.Clear();}int removed=0;foreach(string line in batch){logLines.Enqueue(line);while(logLines.Count>1000)removed+=logLines.Dequeue().Length+Environment.NewLine.Length;}if(logs!=null&&!logs.IsDisposed){int start=logs.SelectionStart,length=logs.SelectionLength;bool follow=start+length>=logs.TextLength;logs.Text=String.Join(Environment.NewLine,logLines.ToArray());if(follow){logs.SelectionStart=logs.TextLength;logs.ScrollToCaret();}else{logs.SelectionStart=Math.Max(0,Math.Min(logs.TextLength,start-removed));logs.SelectionLength=Math.Min(length,logs.TextLength-logs.SelectionStart);}}}
   string Redact(string s){return System.Text.RegularExpressions.Regex.Replace(s,@"https?://[^\s\""'<>]+", "[URL]");}
   void Error(Exception ex){if(!preview)RevealWindow();AddLog(ex.Message);Feedback(Redact(ex.Message),!(ex is GlobalSelectionException));}
-  void InitTray(){var menu=new ContextMenuStrip();menu.Items.Add("打开 Aurora",null,delegate{Show();WindowState=FormWindowState.Normal;Activate();});var connectItem=menu.Items.Add("连接代理",null,delegate{ToggleConnection();});var coreItem=menu.Items.Add("仅启动内核",null,delegate{TogglePower();});menu.Opening+=delegate{connectItem.Text=engine.Proxy.Owned?"断开系统代理":"连接并开启代理";coreItem.Text=engine.Running?"停止内核":"仅启动内核";connectItem.Enabled=coreItem.Enabled=!busy;};menu.Items.Add("恢复系统代理",null,delegate{Run(engine.Proxy.Restore,RefreshState);});menu.Items.Add(new ToolStripSeparator());menu.Items.Add("退出",null,delegate{ExitApp();});tray=new NotifyIcon(){Icon=Icon,Text="Aurora Proxy",ContextMenuStrip=menu,Visible=!preview};tray.DoubleClick+=delegate{Show();WindowState=FormWindowState.Normal;Activate();};}
+  void InitTray(){var menu=new ContextMenuStrip();menu.Items.Add("打开 Aurora",null,delegate{Show();WindowState=FormWindowState.Normal;Activate();});var connectItem=menu.Items.Add("连接代理",null,delegate{ToggleConnection();});var coreItem=menu.Items.Add("仅启动内核",null,delegate{TogglePower();});menu.Opening+=delegate{connectItem.Text=engine.Proxy.Owned?"断开系统代理":"连接并开启代理";coreItem.Text=engine.Running?"停止内核":"仅启动内核";connectItem.Enabled=coreItem.Enabled=!busy;};menu.Items.Add("恢复系统代理",null,delegate{Run(engine.Proxy.Restore,RefreshState);});menu.Items.Add(new ToolStripSeparator());menu.Items.Add("内核实时日志",null,delegate{ShowCoreLog();});menu.Items.Add(new ToolStripSeparator());menu.Items.Add("退出",null,delegate{ExitApp();});tray=new NotifyIcon(){Icon=Icon,Text="Aurora Proxy",ContextMenuStrip=menu,Visible=!preview};tray.DoubleClick+=delegate{Show();WindowState=FormWindowState.Normal;Activate();};}
+  void ShowCoreLog(){try{if(!IsHandleCreated)CreateHandle();using(var d=new CoreLogDialog(engine.CoreLogFile)){d.ShowDialog();}}catch(Exception ex){AddLog("无法打开内核日志："+ex.Message);}}
   void ExitApp(){if(busy){exitRequested=true;Feedback("当前操作完成后退出，正在等待…");return;}try{engine.Stop();}catch(Exception ex){AddLog(ex.Message);MessageBox.Show(this,Redact(ex.Message),"退出前未能恢复系统代理",MessageBoxButtons.OK,MessageBoxIcon.Warning);}closing=true;Close();}
   void OnClose(object sender,FormClosingEventArgs e){if(!closing&&e.CloseReason==CloseReason.UserClosing&&store.State.MinimizeToTray&&!preview){e.Cancel=true;Hide();return;}if(busy&&!closing){e.Cancel=true;exitRequested=true;return;}DisposeResources();closing=true;}
   void DisposeResources(){if(resourcesDisposed)return;resourcesDisposed=true;hints.Dispose();if(timer!=null){timer.Stop();timer.Dispose();}if(logTimer!=null){logTimer.Stop();logTimer.Dispose();}if(engine!=null)try{engine.Dispose();}catch(Exception ex){AddLog(ex.Message);}if(tray!=null){tray.Visible=false;if(tray.ContextMenuStrip!=null)tray.ContextMenuStrip.Dispose();tray.Dispose();}}
