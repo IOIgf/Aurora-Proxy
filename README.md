@@ -1,4 +1,4 @@
-# Aurora Proxy 1.1.14
+# Aurora Proxy 1.1.15
 
 一个面向 Windows 7 的原生 mihomo 桌面客户端。深色 / 浅色主题、圆角卡片与输入框、简洁导航，使用 .NET Framework WinForms，不依赖浏览器组件。配色以深蓝与石墨灰为底，使用钴蓝主按钮、青绿状态、紫色指标及琥珀色操作提示。
 

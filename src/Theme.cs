@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Reflection;
 using System.Windows.Forms;
 using System.Diagnostics;
 
@@ -168,19 +169,25 @@ namespace AuroraProxy {
  // FlowLayoutPanel scales every child's bounds inside each layout pass, so
  // after the form's DPI scaling any later-added control (page action rows,
  // dialog button bars) would be enlarged a second time and drift out of its
- // row. Children already size themselves from the scaled page font, so keep
- // their design-time bounds and let the flow layout reposition them.
- // NOTE: OnLayoutCompleted is protected-internal in .NET Framework 4.0 and
- // cannot be overridden here; remember sizes whenever layout runs instead.
+ // row. Children already size themselves from the scaled page font, so block
+ // child scaling exactly once per scale pass. Doing it during every layout
+ // pass would freeze geometry the runtime legitimately updates afterwards.
+ // NOTE: Control.ScaleChildren is protected-internal in .NET Framework 4.0
+ // and cannot be overridden from another assembly, hence the reflection.
  public class BufferedFlowLayoutPanel:FlowLayoutPanel {
-  readonly Dictionary<Control,Size> designSizes=new Dictionary<Control,Size>();
+  static readonly PropertyInfo scaleChildrenProperty=typeof(Control).GetProperty("ScaleChildren",BindingFlags.Instance|BindingFlags.NonPublic);
+  bool scaling;
   public BufferedFlowLayoutPanel(){DoubleBuffered=true;SetStyle(ControlStyles.ResizeRedraw,true);}
-  protected override void OnLayout(LayoutEventArgs levent){base.OnLayout(levent);RememberDesignSizes();}
-  protected override bool ScaleChildren {get{RestoreDesignSizes();return false;}}
-  // Layout passes that enlarge AutoScrollMinSize (e.g. a scrollbar appearing)
-  // shrink Dock=Fill children; restore the heights this container owns.
-  void RememberDesignSizes(){foreach(Control c in Controls){if(c.Dock==DockStyle.Fill)c.MinimumSize=new Size(0,c.Height);else if(!c.Dock.Equals(DockStyle.None))continue;else designSizes[c]=c.Size;}}
-  void RestoreDesignSizes(){foreach(KeyValuePair<Control,Size> pair in designSizes)if(pair.Key.Parent==this&&pair.Key.Dock==DockStyle.None&&pair.Key.Size!=pair.Value)pair.Key.Size=pair.Value;}
+  // Toggle ScaleChildren off only while this container performs its own
+  // scale pass; normal relayouts afterwards still update child geometry.
+  protected override void ScaleControl(SizeF factor,BoundsSpecified specified){
+   if(scaling||scaleChildrenProperty==null){base.ScaleControl(factor,specified);return;}
+   scaling=true;
+   bool previous=(bool)scaleChildrenProperty.GetValue(this,null);
+   scaleChildrenProperty.SetValue(this,false,null);
+   try{base.ScaleControl(factor,specified);}
+   finally{scaleChildrenProperty.SetValue(this,previous,null);scaling=false;}
+  }
  }
  public class TransitionPanel:BufferedPanel {
   System.Windows.Forms.Timer animation;Stopwatch watch=new Stopwatch();Control body;

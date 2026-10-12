@@ -1,8 +1,13 @@
+# 1.1.15 — DPI 缩放修复（重新发布）
+
+- 修正 BufferedFlowLayoutPanel 的高 DPI 缩放方案：不再在每次布局时冻结子控件尺寸（该做法会阻止运行时合法更新的几何信息，导致 AlignmentUiTests 报“设置页操作按钮行中心不齐”），改为仅在容器自身缩放期间通过反射临时关闭 ScaleChildren，缩放结束后恢复正常布局。.NET Framework 4.0 中 ScaleChildren 为 protected-internal，无法跨程序集 override，故使用反射。
+- 版本号统一升至 1.1.15（AssemblyVersion / AssemblyFileVersion / 侧边栏页脚 / README）。
+
 # 1.1.14 — 内核版本动态显示、托盘实时日志与 DPI 修复
 
 - 内置内核版本改为动态读取：客户端从 core\README.txt 的 “Pinned bundled kernel:” 标记解析版本号，启动日志与设置页据此显示安装包内置内核；替换 core\mihomo.exe 后无需改动代码即可同步提示，“检查版本”仍显示实际使用内核。
 - 托盘菜单新增“内核实时日志”滚动查看器：自动跟随 runtime\mihomo.log 尾部输出，按级别着色，支持刷新 / 清空 / 记事本打开；取代此前只能用记事本打开一次性快照的方式。
-- 修复高 DPI 下动态页面按钮位移问题：BufferedFlowLayoutPanel 阻断子控件二次缩放并按设计尺寸布局，消除 AlignmentUiTests 回归失败。
+- （本版包含的 BufferedFlowLayoutPanel 补丁存在回归，已由 1.1.15 修正。）
 # 1.1.13 — 节点延迟排序
 
 - 节点页支持延迟升序、降序及恢复订阅顺序，也可点击延迟列标题切换。
