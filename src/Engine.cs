@@ -53,6 +53,14 @@ namespace AuroraProxy {
    }
   }
   static void PortAvailable(int port,bool all=false){var l=new TcpListener(all?IPAddress.Any:IPAddress.Loopback,port);try{l.Start();}catch(SocketException){throw new IOException("端口 "+port+" 已被占用，请在设置中更换。");}finally{l.Stop();}}
+  bool MixedReady(int port){
+   // Use an explicit source port different from both listeners. On Windows,
+   // an early control request can otherwise occupy a configured dynamic port.
+   for(int attempt=0;attempt<5;attempt++){int source=20000+(Guid.NewGuid().GetHashCode()&Int32.MaxValue)%25000;if(source==port||source==apiPort)continue;
+    try{using(var client=new TcpClient(AddressFamily.InterNetwork)){client.ExclusiveAddressUse=true;client.Client.Bind(new IPEndPoint(IPAddress.Loopback,source));client.ReceiveTimeout=300;client.SendTimeout=300;var pending=client.BeginConnect(IPAddress.Loopback,port,null,null);using(var wait=pending.AsyncWaitHandle){if(!wait.WaitOne(250))return false;}client.EndConnect(pending);var stream=client.GetStream();stream.Write(new byte[]{5,1,0},0,3);return stream.ReadByte()==5&&stream.ReadByte()==0;}}
+    catch(SocketException){}catch(IOException){}
+   }return false;
+  }
   public void Start(Subscription profile){lock(sync){if(disposed)throw new ObjectDisposedException("Engine");
    if(Running)return;if(process!=null||job!=null)Stop();if(profile==null)throw new InvalidOperationException("请先导入并选中一个订阅。");
    if(!File.Exists(CoreFile))throw new FileNotFoundException("未找到 mihomo 内核。请把官方 Windows 内核放到 core\\mihomo.exe，或在设置中选择内核文件。");
@@ -62,8 +70,8 @@ namespace AuroraProxy {
    var p=new Process();p.StartInfo=new ProcessStartInfo(CoreFile,"-d "+Quote(Store.Work)+" -f "+Quote(path)){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true,StandardOutputEncoding=Encoding.UTF8,StandardErrorEncoding=Encoding.UTF8,WorkingDirectory=Store.Work};
    p.OutputDataReceived+=delegate(object o,DataReceivedEventArgs a){if(a.Data!=null)Emit(a.Data);};p.ErrorDataReceived+=delegate(object o,DataReceivedEventArgs a){if(a.Data!=null)Emit(a.Data);};
    process=p;try{p.Start();job=new ChildJob();if(!job.Attach(p))Emit("提示：当前环境未启用进程联动退出；正常退出仍会停止内核。");p.BeginOutputReadLine();p.BeginErrorReadLine();
-    bool ready=false;for(int i=0;i<60;i++){if(p.HasExited)throw new IOException("mihomo 提前退出，请查看运行日志。");try{Api("GET","/version",null,500);ready=true;break;}catch{}Thread.Sleep(150);}
-    if(!ready)throw new IOException("内核控制接口未就绪，请查看日志和端口设置。");
+    bool ready=false;for(int i=0;i<60;i++){if(p.HasExited)throw new IOException("mihomo 提前退出，请查看运行日志。");try{if(MixedReady(Store.State.Port)){Api("GET","/version",null,500);ready=true;break;}}catch{}Thread.Sleep(150);}
+    if(!ready)throw new IOException("内核控制接口或代理端口未就绪，请查看日志和端口设置。");
     ActiveId=profile.Id;activeRuntime=runtime;Interlocked.Increment(ref generation);p.Exited+=delegate{ThreadPool.QueueUserWorkItem(delegate{bool current=false;lock(sync){if(process==p){current=true;activeRuntime=null;Interlocked.Increment(ref generation);try{Proxy.Restore();}catch(Exception ex){Emit("代理恢复失败："+ex.Message);}}}if(current){var e=Exited;if(e!=null)e();}});};p.EnableRaisingEvents=true;Emit("已启动订阅："+profile.Name);
    }catch{Stop();throw;}
   }}
