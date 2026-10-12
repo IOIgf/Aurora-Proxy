@@ -22,8 +22,8 @@ if ($exists) {
     }
     & gh release upload $tag @assets --repo $env:GH_REPO --clobber
     if ($LASTEXITCODE -ne 0) { throw 'Draft asset upload failed.' }
-    $flags = if ($release.prerelease) { @('--prerelease', '--latest=false') } else { @('--prerelease=false', '--latest') }
-    & gh release edit $tag --repo $env:GH_REPO --draft=false @flags
+    [string[]]$releaseFlags = if ($release.prerelease) { @('--prerelease', '--latest=false') } else { @('--prerelease=false', '--latest') }
+    & gh release edit $tag --repo $env:GH_REPO --draft=false @releaseFlags
     if ($LASTEXITCODE -ne 0) { throw 'Draft publication failed.' }
 } else {
     $notesPath = Join-Path ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($MetadataPath))) 'release-notes.md'
@@ -37,8 +37,11 @@ Windows 7 原生 mihomo 客户端，使用 .NET Framework 4.0 API / C# 4。
 - 用同名 ``.sha256`` 文件校验 ZIP；包内 ``SHA256SUMS.txt`` 校验各文件。
 "@
     [IO.File]::WriteAllText($notesPath, $notes, [Text.UTF8Encoding]::new($false))
-    $flags = if ($release.prerelease) { @('--prerelease', '--latest=false') } else { @('--latest') }
-    & gh release create $tag @assets --repo $env:GH_REPO --verify-tag --title "Aurora Proxy $tag" --notes-file $notesPath @flags
+    # A single untyped string splat becomes individual characters; keep the
+    # stable-release flag explicitly typed as an array too.
+    [string[]]$releaseFlags = if ($release.prerelease) { @('--prerelease', '--latest=false') } else { @('--latest') }
+    Write-Host "Publishing $tag with $($assets.Count) assets and flags: $($releaseFlags -join ' ')"
+    & gh release create $tag @assets --repo $env:GH_REPO --verify-tag --title "Aurora Proxy $tag" --notes-file $notesPath @releaseFlags
     if ($LASTEXITCODE -ne 0) { throw 'Release creation or asset publication failed.' }
 }
 Write-Host "Published $tag with ZIP and SHA-256 assets."
