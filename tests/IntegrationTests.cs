@@ -35,7 +35,7 @@ class IntegrationTests {
    Throws(delegate{Engine.Download("file:///private",false,28790);},"non-HTTP subscription rejected");
    e.Start(p);Assert(e.Running,"actual core starts and controller becomes ready");Assert(S(e.Api("GET","/version",null),"version").Contains("1.19.32"),"controller version endpoint");
    e.Api("PUT","/proxies/"+Uri.EscapeDataString("节点选择"),new Dictionary<string,object>{{"name","日本 B"}});Assert(S(e.Api("GET","/proxies/"+Uri.EscapeDataString("节点选择"),null),"now")=="日本 B","unicode group and node selection");
-   e.ChangeMode("global");Assert(S(e.Api("GET","/configs",null),"mode")=="global","routing mode switches through API");
+   e.Api("PUT","/proxies/GLOBAL",new Dictionary<string,object>{{"name","节点选择"}});e.ChangeMode("global");Assert(S(e.Api("GET","/configs",null),"mode")=="global","routing mode switches through API");
    string before=File.ReadAllText(store.ProfilePath(p));Throws(delegate{e.Apply(p,"proxies: [invalid-node]\n");},"invalid reload rejected before active configuration changes");Assert(e.Running&&File.ReadAllText(store.ProfilePath(p))==before,"invalid reload preserves running core and cached profile");
    e.Apply(p,Yaml.Replace("日本 B","日本 C"));var proxies=(Dictionary<string,object>)e.Api("GET","/proxies",null)["proxies"];Assert(proxies.ContainsKey("日本 C"),"live reload accepts YAML payload");
    var c=e.Api("GET","/connections",null);Assert(c.ContainsKey("uploadTotal")&&c.ContainsKey("downloadTotal"),"connection metrics endpoint");

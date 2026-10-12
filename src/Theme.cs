@@ -49,7 +49,7 @@ namespace AuroraProxy {
    }
    if(layer!=null){var state=graphics.Save();try{graphics.SetClip(control.ClientRectangle,CombineMode.Intersect);layer.PaintBackgroundLayer(graphics);}finally{graphics.Restore(state);}}
   }
-  public static GraphicsPath Rounded(Rectangle r,int radius){var p=new GraphicsPath();int d=radius*2;p.AddArc(r.Left,r.Top,d,d,180,90);p.AddArc(r.Right-d,r.Top,d,d,270,90);p.AddArc(r.Right-d,r.Bottom-d,d,d,0,90);p.AddArc(r.Left,r.Bottom-d,d,d,90,90);p.CloseFigure();return p;}
+  public static GraphicsPath Rounded(Rectangle r,int radius){var p=new GraphicsPath();if(r.Width<=0||r.Height<=0)return p;radius=Math.Max(0,Math.Min(radius,Math.Min(r.Width,r.Height)/2));if(radius==0){p.AddRectangle(r);return p;}int d=radius*2;p.AddArc(r.Left,r.Top,d,d,180,90);p.AddArc(r.Right-d,r.Top,d,d,270,90);p.AddArc(r.Right-d,r.Bottom-d,d,d,0,90);p.AddArc(r.Left,r.Bottom-d,d,d,90,90);p.CloseFigure();return p;}
   public static void Apply(Control c){
    if(c is InputFrame){((InputFrame)c).ApplyTheme();return;}
    c.ForeColor=Text;if(c is SoftCheckBox){((SoftCheckBox)c).ApplyTheme();return;}if(c is SoftButton){((SoftButton)c).ApplyTheme();return;}if(c is Logo){c.Invalidate();return;}

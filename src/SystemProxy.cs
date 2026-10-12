@@ -14,7 +14,8 @@ namespace AuroraProxy {
   [DllImport("wininet.dll",EntryPoint="InternetSetOptionW",SetLastError=true)] static extern bool Notify(IntPtr h,int option,IntPtr data,int length);
   [DllImport("kernel32.dll")] static extern IntPtr GlobalFree(IntPtr p);
   readonly string path; readonly object gate=new object(); public SystemProxy(string root){path=Path.Combine(root,"proxy-recovery.json");}
-  public bool Owned {get{return File.Exists(path);}}
+  bool RecoveryPending {get{return File.Exists(path);}}
+  public bool Owned {get{lock(gate){if(!Windows||!RecoveryPending)return false;try{var journal=Store.Json.Deserialize<ProxyJournal>(File.ReadAllText(path));return journal!=null&&journal.Applied!=null&&Same(Read(),journal.Applied);}catch{return false;}}}}
   public static bool Windows {get{return Environment.OSVersion.Platform==PlatformID.Win32NT;}}
   static ProxySnapshot Read(){
    int stride=Marshal.SizeOf(typeof(Option));IntPtr buf=Marshal.AllocHGlobal(stride*4);
@@ -36,11 +37,11 @@ namespace AuroraProxy {
    }finally{foreach(var p in strings)Marshal.FreeHGlobal(p);Marshal.FreeHGlobal(buf);}
   }
   static bool Same(ProxySnapshot a,ProxySnapshot b){return a.Flags==b.Flags&&a.Server==b.Server&&a.Bypass==b.Bypass&&a.Pac==b.Pac;}
-  public void Enable(int port){lock(gate){if(!Windows)throw new PlatformNotSupportedException("系统代理开关仅用于 Windows。");if(Owned)return;
+  public void Enable(int port){lock(gate){if(!Windows)throw new PlatformNotSupportedException("系统代理开关仅用于 Windows。");if(Owned)return;if(RecoveryPending)Restore();
    var j=new ProxyJournal(){Before=Read(),Applied=new ProxySnapshot(){Flags=3,Server="127.0.0.1:"+port,Bypass="<local>;localhost;127.*;[::1]",Pac=""}};
    Store.Atomic(path,Store.Json.Serialize(j));try{Write(j.Applied);}catch{Restore();throw;}
   }}
-  public void Restore(){lock(gate){if(!Owned||!Windows)return;var j=Store.Json.Deserialize<ProxyJournal>(File.ReadAllText(path));
+  public void Restore(){lock(gate){if(!RecoveryPending||!Windows)return;var j=Store.Json.Deserialize<ProxyJournal>(File.ReadAllText(path));if(j==null||j.Before==null||j.Applied==null)throw new InvalidDataException("系统代理恢复记录不完整，已保留原文件。");
    // Never overwrite a proxy changed by the user or another application after us.
    if(Same(Read(),j.Applied))Write(j.Before);File.Delete(path);
   }}

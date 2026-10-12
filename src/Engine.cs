@@ -9,11 +9,12 @@ using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
 namespace AuroraProxy {
+ public class GlobalSelectionException:InvalidOperationException {public GlobalSelectionException(string message):base(message){}}
  public class DownloadResult {public string Yaml,Usage,Name;}
  public sealed class Engine : IDisposable {
   public readonly Store Store;public readonly SystemProxy Proxy;
   public event Action<string> Log;public event Action Exited;
-  Process process;ChildJob job;readonly object sync=new object();string secret;int apiPort;public string ActiveId{get;private set;}
+  volatile bool disposed;volatile Process process;ChildJob job;string activeRuntime;int generation;public int Generation {get{return Thread.VolatileRead(ref generation);}}readonly object sync=new object();string secret;int apiPort;public string ActiveId{get;private set;}
   public Engine(Store s){Store=s;Proxy=new SystemProxy(s.Root);secret=Guid.NewGuid().ToString("N")+Guid.NewGuid().ToString("N");}
   public bool Running {get{var p=process;try{return p!=null&&!p.HasExited;}catch{return false;}}}
   public string CoreFile {get{string p=Store.State.CorePath;if(String.IsNullOrWhiteSpace(p))p=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"core","mihomo.exe");return Path.GetFullPath(p);}}
@@ -32,13 +33,13 @@ namespace AuroraProxy {
   }
   public static string FormatUsage(string header){if(String.IsNullOrWhiteSpace(header))return "服务商未提供流量信息";
    var d=new Dictionary<string,long>();foreach(Match m in Regex.Matches(header,@"(upload|download|total|expire)\s*=\s*(\d+)")){long n;if(Int64.TryParse(m.Groups[2].Value,out n))d[m.Groups[1].Value]=n;}
-   string s="";if(d.ContainsKey("total")){long used=(d.ContainsKey("upload")?d["upload"]:0)+(d.ContainsKey("download")?d["download"]:0);s=Bytes(used)+" / "+Bytes(d["total"]);}
+   string s="";if(d.ContainsKey("total")){double used=(d.ContainsKey("upload")?(double)d["upload"]:0)+(d.ContainsKey("download")?(double)d["download"]:0);s=Bytes(used)+" / "+Bytes(d["total"]);}
    if(d.ContainsKey("expire")&&d["expire"]>0){try{s+=" · 到期 "+new DateTime(1970,1,1,0,0,0,DateTimeKind.Utc).AddSeconds(d["expire"]).ToLocalTime().ToString("yyyy-MM-dd");}catch{}}
    return String.IsNullOrEmpty(s)?"服务商未提供流量信息":s;
   }
   public static string Bytes(double n){string[] units={"B","KB","MB","GB","TB"};int i=0;while(n>=1024&&i<4){n/=1024;i++;}return n.ToString(i==0?"0":"0.0")+" "+units[i];}
   public string Build(string yaml){return Config.Build(yaml,Store.State,secret);}
-  public void Validate(string runtime){
+  public void Validate(string runtime){if(disposed)throw new ObjectDisposedException("Engine");
    if(!File.Exists(CoreFile))return;
    string file=Path.Combine(Store.Work,"validate-"+Guid.NewGuid().ToString("N")+".yaml");File.WriteAllText(file,runtime,new UTF8Encoding(false));
    try{RunCheck("-t -d "+Quote(Store.Work)+" -f "+Quote(file),45000);}finally{File.Delete(file);}
@@ -52,8 +53,8 @@ namespace AuroraProxy {
    }
   }
   static void PortAvailable(int port,bool all=false){var l=new TcpListener(all?IPAddress.Any:IPAddress.Loopback,port);try{l.Start();}catch(SocketException){throw new IOException("端口 "+port+" 已被占用，请在设置中更换。");}finally{l.Stop();}}
-  public void Start(Subscription profile){lock(sync){
-   if(Running)return;if(profile==null)throw new InvalidOperationException("请先导入并选中一个订阅。");
+  public void Start(Subscription profile){lock(sync){if(disposed)throw new ObjectDisposedException("Engine");
+   if(Running)return;if(process!=null||job!=null)Stop();if(profile==null)throw new InvalidOperationException("请先导入并选中一个订阅。");
    if(!File.Exists(CoreFile))throw new FileNotFoundException("未找到 mihomo 内核。请把官方 Windows 内核放到 core\\mihomo.exe，或在设置中选择内核文件。");
    string yaml=File.ReadAllText(Store.ProfilePath(profile));string runtime=Build(yaml);Validate(runtime);
    PortAvailable(Store.State.Port,Store.State.AllowLan);PortAvailable(Store.State.ApiPort);apiPort=Store.State.ApiPort;
@@ -63,26 +64,31 @@ namespace AuroraProxy {
    process=p;try{p.Start();job=new ChildJob();if(!job.Attach(p))Emit("提示：当前环境未启用进程联动退出；正常退出仍会停止内核。");p.BeginOutputReadLine();p.BeginErrorReadLine();
     bool ready=false;for(int i=0;i<60;i++){if(p.HasExited)throw new IOException("mihomo 提前退出，请查看运行日志。");try{Api("GET","/version",null,500);ready=true;break;}catch{}Thread.Sleep(150);}
     if(!ready)throw new IOException("内核控制接口未就绪，请查看日志和端口设置。");
-    ActiveId=profile.Id;p.Exited+=delegate{if(process==p){try{Proxy.Restore();}catch(Exception ex){Emit("代理恢复失败："+ex.Message);}var e=Exited;if(e!=null)e();}};p.EnableRaisingEvents=true;Emit("已启动订阅："+profile.Name);
+    ActiveId=profile.Id;activeRuntime=runtime;Interlocked.Increment(ref generation);p.Exited+=delegate{ThreadPool.QueueUserWorkItem(delegate{bool current=false;lock(sync){if(process==p){current=true;activeRuntime=null;Interlocked.Increment(ref generation);try{Proxy.Restore();}catch(Exception ex){Emit("代理恢复失败："+ex.Message);}}}if(current){var e=Exited;if(e!=null)e();}});};p.EnableRaisingEvents=true;Emit("已启动订阅："+profile.Name);
    }catch{Stop();throw;}
   }}
-  public void Apply(Subscription profile,string yaml){lock(sync){string runtime=Build(yaml);Validate(runtime);
-   if(!Running)return;
-   Api("PUT","/configs?force=true",new Dictionary<string,object>{{"payload",runtime}});
-   ActiveId=profile.Id;Store.Atomic(Path.Combine(Store.Work,"config.yaml"),runtime);Emit("已应用订阅："+profile.Name);
+  public void Apply(Subscription profile,string yaml){lock(sync){if(disposed)throw new ObjectDisposedException("Engine");if(profile==null)throw new ArgumentNullException("profile");string runtime=Build(yaml);
+   if(Running&&ActiveId==profile.Id&&activeRuntime==runtime){Emit("配置内容未变化，保留当前连接。");return;}
+   Validate(runtime);if(!Running)return;
+   string path=Path.Combine(Store.Work,"config.yaml"),before=File.Exists(path)?File.ReadAllText(path):null;
+   Store.Atomic(path,runtime);
+   try{Api("PUT","/configs?force=true",new Dictionary<string,object>{{"payload",runtime}});}catch{activeRuntime=null;Interlocked.Increment(ref generation);if(before!=null)Store.Atomic(path,before);else File.Delete(path);throw;}
+   ActiveId=profile.Id;activeRuntime=runtime;Interlocked.Increment(ref generation);Emit("已应用订阅："+profile.Name);
   }}
-  public Dictionary<string,object> Api(string method,string path,object body,int timeout=8000){
+  public Dictionary<string,object> Api(string method,string path,object body,int timeout=8000){if(disposed)throw new ObjectDisposedException("Engine");
    var req=(HttpWebRequest)WebRequest.Create("http://127.0.0.1:"+apiPort+path);req.Method=method;req.Proxy=null;req.Timeout=timeout;req.ReadWriteTimeout=timeout;req.Headers["Authorization"]="Bearer "+secret;
    if(body!=null){byte[] data=Encoding.UTF8.GetBytes(Store.Json.Serialize(body));req.ContentType="application/json";req.ContentLength=data.Length;using(var s=req.GetRequestStream())s.Write(data,0,data.Length);}
    try{using(var res=req.GetResponse())using(var reader=new StreamReader(res.GetResponseStream())){string s=reader.ReadToEnd();return String.IsNullOrWhiteSpace(s)?new Dictionary<string,object>():Store.Json.Deserialize<Dictionary<string,object>>(s);}}
    catch(WebException ex){if(ex.Response!=null)using(var res=ex.Response)using(var reader=new StreamReader(res.GetResponseStream())){throw new IOException("控制接口请求失败："+reader.ReadToEnd(),ex);}throw;}
   }
-  public void ChangeMode(string mode){lock(sync){if(Running)Api("PATCH","/configs",new Dictionary<string,object>{{"mode",mode}});Store.State.Mode=mode;Store.Save();}}
-  public void ToggleSystemProxy(){lock(sync){if(Proxy.Owned){Proxy.Restore();return;}if(!Running)throw new InvalidOperationException("请先启动内核。");Proxy.Enable(Store.State.Port);if(!Running){Proxy.Restore();throw new IOException("内核已退出，系统代理已恢复。");}}}
+  public string GlobalTarget(){var all=Api("GET","/proxies",null)["proxies"] as Dictionary<string,object>;string name="GLOBAL";var seen=new HashSet<string>();while(all!=null&&seen.Add(name)){object raw;if(!all.TryGetValue(name,out raw))break;var d=raw as Dictionary<string,object>;if(d==null)break;object next;if(d.TryGetValue("now",out next)&&next!=null&&!String.IsNullOrEmpty(next.ToString())){name=next.ToString();continue;}object type;string t=d.TryGetValue("type",out type)?Convert.ToString(type):"";if(t=="Direct"||t.StartsWith("Reject")||t=="Compatible"||t=="Pass"||t=="")break;return name;}throw new GlobalSelectionException("GLOBAL 当前没有选到代理出口（当前："+name+"）。请在节点页的 GLOBAL 分类中选择可用节点或策略组，再切换全局模式。");}
+  public void ChangeMode(string mode){lock(sync){if(disposed)throw new ObjectDisposedException("Engine");if(mode!="rule"&&mode!="global"&&mode!="direct")throw new ArgumentException("路由模式无效。");string previous=Store.State.Mode;if(mode==previous)return;bool running=Running;if(running&&mode=="global")GlobalTarget();if(running)Api("PATCH","/configs",new Dictionary<string,object>{{"mode",mode}});try{Store.UpdateSettings(delegate(Settings settings){settings.Mode=mode;});}catch(Exception original){if(running)try{Api("PATCH","/configs",new Dictionary<string,object>{{"mode",previous}});}catch(Exception rollback){throw new IOException("保存路由模式失败，恢复原模式也未完成："+rollback.Message,original);}throw;}if(activeRuntime!=null)activeRuntime=Regex.Replace(activeRuntime,@"(?m)^mode: [^\r\n]*","mode: "+mode);}}
+
+  public void ToggleSystemProxy(){lock(sync){if(disposed)throw new ObjectDisposedException("Engine");if(Proxy.Owned){Proxy.Restore();return;}if(!Running)throw new InvalidOperationException("请先启动内核。");if(Store.State.Mode=="global")GlobalTarget();Proxy.Enable(Store.State.Port);if(!Running){Proxy.Restore();throw new IOException("内核已退出，系统代理已恢复。");}}}
   public void Stop(){lock(sync){Exception restoreError=null;try{Proxy.Restore();}catch(Exception ex){restoreError=ex;}
-   var p=process;process=null;ActiveId=null;if(p!=null){try{if(!p.HasExited){p.Kill();p.WaitForExit(3000);}}catch(Exception ex){Emit("停止内核："+ex.Message);}p.Dispose();}if(job!=null){job.Dispose();job=null;}
+   var p=process;process=null;ActiveId=null;activeRuntime=null;Interlocked.Increment(ref generation);if(p!=null){try{if(!p.HasExited){p.Kill();p.WaitForExit(3000);}}catch(Exception ex){Emit("停止内核："+ex.Message);}p.Dispose();}if(job!=null){job.Dispose();job=null;}
    if(restoreError!=null)throw new IOException("系统代理恢复失败，恢复记录已保留。请重新启动客户端恢复，或在 Windows Internet 选项中手动关闭代理。",restoreError);
   }}
-  public void Dispose(){Stop();}
+  public void Dispose(){lock(sync){if(disposed)return;try{Stop();}finally{disposed=true;}}}
  }
 }

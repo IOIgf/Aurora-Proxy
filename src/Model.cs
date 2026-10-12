@@ -38,7 +38,7 @@ namespace AuroraProxy {
   void Load(){
    string path=Path.Combine(Root,"settings.json");State=new Settings();if(!File.Exists(path))return;
    try{State=Json.Deserialize<Settings>(File.ReadAllText(path));if(State==null||State.Profiles==null)throw new Exception();
-    foreach(var s in State.Profiles){if(!Regex.IsMatch(s.Id??"","^[a-f0-9]{32}$"))throw new Exception();s.Url=Unprotect(s.Url??"");}
+    var ids=new HashSet<string>();foreach(var s in State.Profiles){if(s==null||!ids.Add(s.Id??""))throw new Exception();if(!Regex.IsMatch(s.Id??"","^[a-f0-9]{32}$"))throw new Exception();s.Url=Unprotect(s.Url??"");}
     if(State.Port<1024||State.Port>65535||State.ApiPort<1024||State.ApiPort>65535||State.Port==State.ApiPort)throw new Exception();
     if(State.Mode!="rule"&&State.Mode!="global"&&State.Mode!="direct")State.Mode="rule";
     State.UpdateHours=Math.Max(1,Math.Min(720,State.UpdateHours));
@@ -47,6 +47,7 @@ namespace AuroraProxy {
    }catch(Exception ex){throw new InvalidDataException("本地设置无法读取。请先备份数据目录，再检查 settings.json；程序没有覆盖原文件。",ex);}
   }
   public void Save(){var copy=Json.Deserialize<Settings>(Json.Serialize(State));foreach(var s in copy.Profiles)s.Url=Protect(s.Url);copy.LanPassword=Protect(copy.LanPassword);Atomic(Path.Combine(Root,"settings.json"),Json.Serialize(copy));}
+  public void UpdateSettings(Action<Settings> change){var before=State;var candidate=Json.Deserialize<Settings>(Json.Serialize(before));candidate.Profiles=before.Profiles;change(candidate);State=candidate;try{Save();}catch{State=before;throw;}}
   static bool Windows {get{return Environment.OSVersion.Platform==PlatformID.Win32NT;}}
   static string Protect(string s){if(!Windows||String.IsNullOrEmpty(s))return s;return "dpapi:"+Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(s),null,DataProtectionScope.CurrentUser));}
   static string Unprotect(string s){if(!s.StartsWith("dpapi:"))return s;return Encoding.UTF8.GetString(ProtectedData.Unprotect(Convert.FromBase64String(s.Substring(6)),null,DataProtectionScope.CurrentUser));}
@@ -59,14 +60,16 @@ namespace AuroraProxy {
   public static void ValidateLan(bool enabled,bool auth,string user,string password){if(!enabled||!auth)return;if(!Regex.IsMatch(user??"",@"\A[A-Za-z0-9._-]{1,32}\z"))throw new ArgumentException("共享用户名需为 1–32 位字母、数字、点、下划线或短横线。");if(!Regex.IsMatch(password??"",@"\A[!-9;-~]{8,128}\z"))throw new ArgumentException("共享密码需为 8–128 位可打印英文字符，不能含空格、换行或冒号。");}
   public static string Build(string yaml,int port,int api,string mode,string secret){return Build(yaml,new Settings(){Port=port,ApiPort=api,Mode=mode},secret);}
   public static string Build(string yaml,Settings settings,string secret){
-   int port=settings.Port,api=settings.ApiPort;string mode=settings.Mode;ValidateLan(settings.AllowLan,settings.LanAuthentication,settings.LanUser,settings.LanPassword);
+   int port=settings.Port,api=settings.ApiPort;string mode=settings.Mode;if(port<1024||port>65535||api<1024||api>65535||port==api)throw new ArgumentException("代理端口和控制端口需为不同的 1024–65535 端口。");if(mode!="rule"&&mode!="global"&&mode!="direct")throw new ArgumentException("路由模式无效。");ValidateLan(settings.AllowLan,settings.LanAuthentication,settings.LanUser,settings.LanPassword);
    if(String.IsNullOrWhiteSpace(yaml)||yaml.Length>8*1024*1024)throw new InvalidDataException("订阅为空或超过 8 MiB。");
    yaml=yaml.TrimStart('\uFEFF');var lines=yaml.Replace("\r\n","\n").Replace('\r','\n').Split('\n');
    var output=new StringBuilder();var keys=new HashSet<string>();bool skip=false,ended=false,document=false;
    foreach(string line in lines){string t=line.Trim();if(t==""||t.StartsWith("#")){if(!skip)output.AppendLine(line);continue;}
-    if(t=="---"){if(document||keys.Count>0||ended)throw new InvalidDataException("只支持单文档 YAML。");document=true;continue;}
-    if(t=="..."){ended=true;continue;}if(ended)throw new InvalidDataException("只支持单文档 YAML。");
+    if(Regex.IsMatch(line,@"^---(?:[ \t]+#.*)?[ \t]*$")){if(document||keys.Count>0||ended)throw new InvalidDataException("只支持单文档 YAML。");document=true;continue;}
+    if(Regex.IsMatch(line,@"^\.\.\.(?:[ \t]+#.*)?[ \t]*$")){ended=true;continue;}if(ended)throw new InvalidDataException("只支持单文档 YAML。");
     if(line[0]!=' '&&line[0]!='\t'){
+     // YAML allows root sequence values with no indentation after a mapping key.
+     if((t=="-"||line.StartsWith("- "))&&keys.Count>0){if(!skip)output.AppendLine(line);continue;}
      Match m=Key.Match(line);if(!m.Success)throw new InvalidDataException("请使用 Clash/mihomo 的块式 YAML 配置。原始节点链接、Base64、根级合并键和流式根对象暂不支持。");
      string k=m.Groups[1].Value+m.Groups[2].Value+m.Groups[3].Value;
      if(!keys.Add(k))throw new InvalidDataException("配置包含重复顶层字段："+k);
