@@ -4,6 +4,8 @@
 
 ## 开始使用
 
+在 [Releases](https://github.com/IOIgf/Win7Proxy/releases/latest) 下载 `AuroraProxy-Win7-x64-v版本号.zip`；不要把 GitHub 自动生成的 Source code 压缩包当成安装包。
+
 1. 将 ZIP **完整解压**到任意目录，例如 `D:\Apps\AuroraProxy`，不要直接在压缩包里启动。
 2. 双击 `AuroraProxy.exe`。客户端需要 .NET Framework 4.0 或以上；**Windows 7 SP1 推荐安装 .NET Framework 4.8**。
 3. 打开 **订阅 → 添加订阅**，填写名称和 **Clash / mihomo 格式**的订阅链接。也可以选择 **导入 YAML**。
@@ -35,6 +37,22 @@
 - 按钮悬停和按下的短时过渡、导航选中动效、180 ms 页面滑入、操作中的进度指示；可以在设置里关闭动画，静止控件不持续运行动画计时器。
 
 本次界面修订内容见 `CHANGELOG.md`。升级时退出旧版再解压新版；已有订阅和设置保存在同一个数据目录，会继续使用。
+
+## 标签自动构建与发布
+
+提交代码后，推送 `v主版本.次版本.修订版本` 标签即可自动编译、检查并发布，例如：
+
+```bash
+git tag -a v1.1.9 -m "Aurora Proxy v1.1.9"
+git push origin v1.1.9
+```
+
+- GitHub Actions 在 Windows Server 2022 上使用 C# 4 和固定的 Microsoft .NET Framework 4.0 参考程序集编译，校验内核文件，并运行勾选框缓冲区回归及真实 mihomo 接口检查。
+- 标签版本会同步写入生成程序的程序集、界面底部和 ZIP 名称；源码仓库本身不会被构建流程改写。
+- 检查通过后，Release 自动附带包含内核的 ZIP 和同名 `.sha256` 文件。`v1.2.0-beta.1` 等带后缀的标签发布为预发行版。
+- 推送 `main` 或手动运行 Actions 也会构建，可在对应运行的 Artifacts 下载构建产物；只有版本标签会发布 Release。
+- 发布使用 GitHub 自动提供的 `GITHUB_TOKEN`，无需保存个人访问令牌。同一标签重复运行不会覆盖已完整发布的资产。
+- 工作流与脚本：`.github/workflows/release.yml`、`ci/build-release.ps1`、`ci/publish-release.ps1`。这两个 PowerShell 脚本用于构建环境，Win7 用户运行程序不需要 PowerShell 7。
 
 ## 局域网连接
 
