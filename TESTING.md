@@ -3,7 +3,7 @@
 ## GitHub Actions Windows build and tag releases
 
 - The workflow builds on Windows Server 2022 with the Windows .NET Framework compiler, C# 4 syntax and checksum-pinned Microsoft .NET Framework 4.0 reference assemblies. It compiles a fresh client from staged sources rather than republishing the checked-in executable.
-- The first [Windows CI run](https://github.com/IOIgf/Win7Proxy/actions/runs/38187305904) passed 43 complete-checkbox-frame checks and 25 integration checks using the bundled Windows mihomo executable. This adds native Windows GDI / checkbox buffer and Windows core-process coverage to the earlier Mono checks.
+- The first [Windows CI run](https://github.com/IOIgf/Aurora-Proxy/actions/runs/38187305904) passed 43 complete-checkbox-frame checks and 25 integration checks using the bundled Windows mihomo executable. This adds native Windows GDI / checkbox buffer and Windows core-process coverage to the earlier Mono checks.
 - Release packaging verifies the bundled core hash, synchronizes staged assembly/footer/README versions with the tag, regenerates per-file checksums, verifies ZIP entries and emits a ZIP checksum. Branch builds retain downloadable artifacts; version-tag builds publish Release assets after successful checks.
 - Windows Server 2022 is not Windows 7. Aero/Classic appearance, actual Win7 DPI, IME, tray behavior and system proxy acceptance on Windows 7 remain unverified.
 

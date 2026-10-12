@@ -4,7 +4,7 @@
 
 ## 开始使用
 
-在 [Releases](https://github.com/IOIgf/Win7Proxy/releases/latest) 下载 `AuroraProxy-Win7-x64-v版本号.zip`；不要把 GitHub 自动生成的 Source code 压缩包当成安装包。
+在 [Releases](https://github.com/IOIgf/Aurora-Proxy/releases/latest) 下载 `AuroraProxy-Win7-x64-v版本号.zip`；不要把 GitHub 自动生成的 Source code 压缩包当成安装包。
 
 1. 将 ZIP **完整解压**到任意目录，例如 `D:\Apps\AuroraProxy`，不要直接在压缩包里启动。
 2. 双击 `AuroraProxy.exe`。客户端需要 .NET Framework 4.0 或以上；**Windows 7 SP1 推荐安装 .NET Framework 4.8**。
