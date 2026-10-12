@@ -15,7 +15,7 @@ namespace AuroraProxy {
   readonly Store store;readonly Engine engine;readonly bool preview;
   TransitionPanel content;Label title,subtitle,sideState;ActivityIndicator activity;SoftButton[] nav;int page;
   Label stateLabel,activeLabel,detailLabel,downloadLabel,uploadLabel,connectionsLabel,versionLabel;
-  SoftButton power,proxyButton;ComboBox mode,groups;ListView subscriptions,nodes;TextBox search;RichTextBox logs;
+  int nodeSortOrder;SoftButton power,proxyButton;ComboBox mode,groups;ListView subscriptions,nodes;TextBox search;RichTextBox logs;
   TextBox corePath;NumericUpDown port,apiPort,updateHours;CheckBox trayClose,autoUpdate,dark,animations;
   NotifyIcon tray;System.Windows.Forms.Timer timer,logTimer;readonly object logGate=new object();readonly Queue<string> pendingLogs=new Queue<string>();bool busy,exitRequested,closing,updatingGroups,layoutReady,resourcesDisposed,nodesNeedRefresh,buildingPage;volatile bool polling;string pendingGroup;int proxyGeneration=-1;DateTime nextAuto=DateTime.MinValue;
   readonly Queue<string> logLines=new Queue<string>();Dictionary<string,object> proxyData=new Dictionary<string,object>();
@@ -41,7 +41,7 @@ namespace AuroraProxy {
    var navPanel=new BufferedFlowLayoutPanel(){Location=new Point(16,130),Size=new Size(165,350),FlowDirection=FlowDirection.TopDown,WrapContents=false,Tag="sidebar"};sidebar.Controls.Add(navPanel);
    string[] names={"01   概览","02   订阅","03   节点","04   日志","05   设置","06   局域网","07   连接"};nav=new SoftButton[7];for(int i=0;i<7;i++){int n=i;nav[i]=new SoftButton(){Text=names[i],Navigation=true,Tone=new PaletteTone[]{PaletteTone.Blue,PaletteTone.Teal,PaletteTone.Violet,PaletteTone.Amber,PaletteTone.Blue,PaletteTone.Teal,PaletteTone.Violet}[i],Size=new Size(162,42),Margin=new Padding(0,0,0,8)};nav[i].Click+=delegate{if(!closing)ShowPage(n);};navPanel.Controls.Add(nav[i]);}
    var bottom=new BufferedPanel(){Dock=DockStyle.Bottom,Height=100,Tag="sidebar"};sideState=Label("●  未连接",10);sideState.Location=new Point(2,16);sideState.AutoSize=true;bottom.Controls.Add(sideState);
-   var foot=Label("Windows 7+  ·  v1.1.12",8,true);foot.Location=new Point(2,57);bottom.Controls.Add(foot);sidebar.Controls.Add(bottom);
+   var foot=Label("Windows 7+  ·  v1.1.13",8,true);foot.Location=new Point(2,57);bottom.Controls.Add(foot);sidebar.Controls.Add(bottom);
    var main=new BufferedTableLayoutPanel(){Dock=DockStyle.Fill,Padding=new Padding(34,24,34,24),ColumnCount=1,RowCount=3};main.RowStyles.Add(new RowStyle(SizeType.Absolute,90));main.RowStyles.Add(new RowStyle(SizeType.Percent,100));main.RowStyles.Add(new RowStyle(SizeType.Absolute,30));layout.Controls.Add(main,1,0);
    var head=new BufferedPanel(){Dock=DockStyle.Fill};title=Label("概览",23);title.Font=Theme.Font(23,FontStyle.Bold);subtitle=Label("连接状态与日常控制",9,true);subtitle.Location=new Point(2,50);head.Controls.Add(title);head.Controls.Add(subtitle);main.Controls.Add(head,0,0);
    content=new TransitionPanel(){Dock=DockStyle.Fill};main.Controls.Add(content,0,1);activity=new ActivityIndicator(){Text="READY  /  就绪",Dock=DockStyle.Fill,Margin=new Padding(0)};main.Controls.Add(activity,0,2);Theme.Apply(this);
@@ -105,7 +105,7 @@ namespace AuroraProxy {
   void OpenProfile(){try{var s=SelectedProfile();Process.Start(new ProcessStartInfo("notepad.exe","\""+store.ProfilePath(s)+"\""){UseShellExecute=true});}catch(Exception ex){Error(ex);}}
   void Nodes(){var stack=Stack();content.Controls.Add(stack);var row=Row();groups=new NoWheelComboBox(){DropDownStyle=ComboBoxStyle.DropDownList,Width=230,Font=Theme.Font(10),Margin=new Padding(0,4,14,0)};groups.SelectedIndexChanged+=delegate{if(!updatingGroups)FillNodes();};row.Controls.Add(Theme.Input(groups,36));search=new TextBox(){Text=restoreNodeView?rememberedSearch??"":"",Width=185,Font=Theme.Font(10),Margin=new Padding(0,4,14,0)};search.TextChanged+=delegate{FillNodes(true);};row.Controls.Add(Theme.Input(search,36));row.Controls.Add(AvailableButton("刷新",RefreshNodes,delegate{return engine.Running;},false,80));Add(stack,row,58);
    var card=new Surface(){Padding=new Padding(14),Margin=new Padding(0,0,0,14)};nodes=List("节点名称","协议类型","延迟","状态");nodes.Columns[0].Width=350;nodes.Columns[1].Width=145;nodes.Columns[2].Width=90;nodes.Columns[3].Width=90;nodes.Dock=DockStyle.Fill;nodes.DoubleClick+=delegate{SelectNode();};card.Controls.Add(nodes);Add(stack,card,-1);
-   var actions=Row();actions.Controls.Add(AvailableButton("使用选中节点",SelectNode,CanSelectNode,true,145));actions.Controls.Add(AvailableButton("测试选中",TestNode,HasNode,false,116));actions.Controls.Add(AvailableButton("测试整组",TestGroup,delegate{return engine.Running&&groups!=null&&groups.SelectedItem!=null;},false,116));Add(stack,actions,52);nodeHint=Label("",8,true);Add(stack,nodeHint,34);nodes.SelectedIndexChanged+=delegate{RefreshActions();};FillGroups();}
+   var nodeSort=new NoWheelComboBox(){DropDownStyle=ComboBoxStyle.DropDownList,Width=150,Font=Theme.Font(10)};nodeSort.Items.AddRange(new object[]{"订阅原顺序","延迟：低到高","延迟：高到低"});nodeSort.SelectedIndex=nodeSortOrder;nodeSort.SelectedIndexChanged+=delegate{nodeSortOrder=nodeSort.SelectedIndex;FillNodes(true);};nodes.ColumnClick+=delegate(object sender,ColumnClickEventArgs e){if(e.Column==2)nodeSort.SelectedIndex=nodeSortOrder==1?2:1;};var actions=Row();actions.Controls.Add(Theme.Input(nodeSort,36));actions.Controls.Add(AvailableButton("使用选中节点",SelectNode,CanSelectNode,true,145));actions.Controls.Add(AvailableButton("测试选中",TestNode,HasNode,false,116));actions.Controls.Add(AvailableButton("测试整组",TestGroup,delegate{return engine.Running&&groups!=null&&groups.SelectedItem!=null;},false,116));Add(stack,actions,52);nodeHint=Label("",8,true);Add(stack,nodeHint,34);nodes.SelectedIndexChanged+=delegate{RefreshActions();};FillGroups();}
   static Dictionary<string,object> Dict(object o){return o as Dictionary<string,object>??new Dictionary<string,object>();}
   static string Str(Dictionary<string,object> d,string key){object o;return d.TryGetValue(key,out o)&&o!=null?o.ToString():"";}
   static IEnumerable<object> ArrayOf(object o){var a=o as IEnumerable;if(a!=null&&!(o is string)){foreach(var v in a)yield return v;}}
@@ -118,8 +118,9 @@ namespace AuroraProxy {
    if(names.Length>0)pendingGroup=null;FillNodes(old!=null&&(groups.SelectedItem as string)==old);if(names.Length>0&&restoreNodeView){if((groups.SelectedItem as string)==rememberedGroup&&nodeBookmark!=null)RestoreAfterLayout(nodes,nodeBookmark,null);restoreNodeView=false;}RefreshActions();
   }
   void FillNodes(){FillNodes(false);}
-  void FillNodes(bool preserve){if(nodes==null||groups==null||nodes.IsDisposed||groups.IsDisposed)return;string g=groups.SelectedItem as string;var values=new List<string[]>();
+  void FillNodes(bool preserve){if(nodes==null||groups==null||nodes.IsDisposed||groups.IsDisposed)return;nodes.Columns[2].Text=nodeSortOrder==1?"延迟 ↑":nodeSortOrder==2?"延迟 ↓":"延迟";string g=groups.SelectedItem as string;var values=new List<string[]>();
    if(g!=null&&proxyData.ContainsKey(g)){var group=Dict(proxyData[g]);object all;if(group.TryGetValue("all",out all))foreach(var o in ArrayOf(all)){string name=o.ToString();if(!String.IsNullOrEmpty(search.Text)&&name.IndexOf(search.Text,StringComparison.OrdinalIgnoreCase)<0)continue;var d=proxyData.ContainsKey(name)?Dict(proxyData[name]):new Dictionary<string,object>();string delay="未测试";object h;if(d.TryGetValue("history",out h)){var history=ArrayOf(h).ToArray();if(history.Length>0){string v=Str(Dict(history[history.Length-1]),"delay");delay=v=="0"?"超时":v+" ms";}}values.Add(new string[]{name,Str(d,"type"),delay,Str(group,"now")==name?"使用中":""});}}
+   values=SortNodeRows(values,nodeSortOrder);
    if(preserve&&nodes.Items.Cast<ListViewItem>().Select(x=>x.Tag as string).SequenceEqual(values.Select(x=>x[0]))){
     // Latency tests normally change history only. Keep every row object,
     // native scroll offset, selection and focus; update changed cells only.
@@ -130,6 +131,8 @@ namespace AuroraProxy {
    nodes.BeginUpdate();try{nodes.Items.Clear();foreach(var row in values){var item=new ListViewItem(row){Tag=row[0]};nodes.Items.Add(item);if(selected!=null&&row[0]==selected)item.Selected=true;if(focused!=null&&row[0]==focused)item.Focused=true;}}finally{nodes.EndUpdate();}
    if(preserve&&nodes.Items.Count>0){var restored=nodes.Items.Cast<ListViewItem>().FirstOrDefault(x=>(x.Tag as string)==topName);nodes.TopItem=restored??nodes.Items[Math.Min(topIndex,nodes.Items.Count-1)];}RefreshActions();
   }
+  static long NodeLatency(string text){long value;return text!=null&&text.EndsWith(" ms",StringComparison.Ordinal)&&Int64.TryParse(text.Substring(0,text.Length-3),out value)&&value>0?value:0;}
+  static List<string[]> SortNodeRows(List<string[]> rows,int order){if(order==0)return rows;var indexed=rows.Select((row,index)=>new{Row=row,Index=index,Delay=NodeLatency(row[2])});return indexed.OrderBy(x=>x.Delay>0?0:1).ThenBy(x=>x.Delay>0?(order==2?-x.Delay:x.Delay):0).ThenBy(x=>x.Index).Select(x=>x.Row).ToList();}
   string SelectedNode(){if(nodes==null||nodes.SelectedItems.Count==0)throw new InvalidOperationException("请先选中一个节点。");return nodes.SelectedItems[0].Tag.ToString();}
   void MarkSelectedNode(string groupName,string nodeName){
    // A successful PUT changes only this group's choice. Update the existing
