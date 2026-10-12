@@ -69,7 +69,7 @@ class UiSmokeTests {
   // Mono's managed MessageBox is enumerable; the real Windows native dialog is not.
   if(Environment.OSVersion.Platform!=PlatformID.Win32NT){string root=Path.Combine(Path.GetTempPath(),"aurora-ui-test-"+Guid.NewGuid().ToString("N"));try{using(var main=new MainForm(new Store(root),true))using(var dismiss=new System.Windows.Forms.Timer(){Interval=25}){
    main.Show();Pump(80);bool successCalled=false;dismiss.Tick+=delegate{foreach(Form dialog in Application.OpenForms.Cast<Form>().ToArray())if(dialog.Modal&&!Object.ReferenceEquals(dialog,main))dialog.Close();};dismiss.Start();
-   typeof(MainForm).GetMethod("Run",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(main,new object[]{(Action)delegate{throw new IOException("Expected failed subscription operation");},(Action)delegate{successCalled=true;}});Pump(700);
+   typeof(MainForm).GetMethod("Run",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(main,new object[]{(Action)delegate{throw new IOException("Expected failed subscription operation");},(Action)delegate{successCalled=true;},"正在测试失败回退…"});Pump(700);
    Check(!successCalled,"failed operation does not invoke its success callback");
    var content=(Control)typeof(MainForm).GetField("content",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(main);Check(content.Enabled,"failed operation re-enables content controls");
    var nav=(SoftButton[])typeof(MainForm).GetField("nav",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(main);Check(nav.All(x=>x.Enabled),"failed operation restores navigation buttons");

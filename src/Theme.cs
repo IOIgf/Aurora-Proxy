@@ -174,12 +174,13 @@ namespace AuroraProxy {
   protected override void Dispose(bool disposing){if(disposing){Cancel();if(animation!=null){animation.Dispose();animation=null;}}base.Dispose(disposing);}
  }
  public class ActivityIndicator:Control {
+  public bool ErrorState {get;set;}
   System.Windows.Forms.Timer animation;Stopwatch watch=new Stopwatch();bool busy;
   public bool Busy {get{return busy;}set{if(busy==value)return;busy=value;if(busy&&Motion.Enabled&&Visible){watch.Restart();animation.Start();}else animation.Stop();Invalidate();}}
   public ActivityIndicator(){DoubleBuffered=true;Font=Theme.Font(8);Height=26;animation=new System.Windows.Forms.Timer(){Interval=32};animation.Tick+=delegate{if(!busy||!Motion.Enabled||!Visible){animation.Stop();}Invalidate();};}
   protected override void OnTextChanged(EventArgs e){base.OnTextChanged(e);Invalidate();}
-  protected override void OnPaint(PaintEventArgs e){var g=e.Graphics;g.SmoothingMode=SmoothingMode.AntiAlias;int y=Math.Max(0,(Height-12)/2);if(busy){using(var p=new Pen(Theme.Edge,2))g.DrawEllipse(p,2,y,11,11);using(var p=new Pen(Theme.Accent,2)){p.StartCap=LineCap.Round;p.EndCap=LineCap.Round;g.DrawArc(p,2,y,11,11,Motion.Enabled?(float)(watch.Elapsed.TotalMilliseconds/3%360):-90,100);}}else using(var b=new SolidBrush(Theme.Muted))g.FillEllipse(b,5,y+4,5,5);
-   Theme.DrawText(g,Text,Font,new Rectangle(24,0,Math.Max(1,Width-24),Height),Theme.Muted,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis|TextFormatFlags.SingleLine);}
+  protected override void OnPaint(PaintEventArgs e){var g=e.Graphics;g.SmoothingMode=SmoothingMode.AntiAlias;int y=Math.Max(0,(Height-12)/2);if(busy){using(var p=new Pen(Theme.Edge,2))g.DrawEllipse(p,2,y,11,11);using(var p=new Pen(Theme.Accent,2)){p.StartCap=LineCap.Round;p.EndCap=LineCap.Round;g.DrawArc(p,2,y,11,11,Motion.Enabled?(float)(watch.Elapsed.TotalMilliseconds/3%360):-90,100);}}else using(var b=new SolidBrush(ErrorState?Theme.Amber:Theme.Muted))g.FillEllipse(b,5,y+4,5,5);
+   Theme.DrawText(g,Text,Font,new Rectangle(24,0,Math.Max(1,Width-24),Height),ErrorState?Theme.Amber:Theme.Muted,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis|TextFormatFlags.SingleLine);}
   protected override void OnVisibleChanged(EventArgs e){base.OnVisibleChanged(e);if(animation==null)return;if(busy&&Visible&&Motion.Enabled)animation.Start();else animation.Stop();}
   protected override void Dispose(bool disposing){if(disposing&&animation!=null){animation.Stop();animation.Dispose();animation=null;}base.Dispose(disposing);}
  }

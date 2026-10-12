@@ -82,11 +82,11 @@ try {
     if ([Reflection.AssemblyName]::GetAssemblyName($executable).Version.ToString() -ne $assemblyVersion) { throw 'Built assembly version does not match the tag.' }
 
     # Run deterministic checkbox buffer regression and real-core integration on Windows.
-    foreach ($test in @('SystemProxyTests', 'AuditCoreTests', 'AuditUiTests', 'EmojiUiTests', 'ResizeUiTests', 'CheckBoxFrameTests', 'SubscriptionNameTests', 'SubscriptionNameUiTests', 'IntegrationTests', 'NetworkTests', 'NodeUiTests', 'NetworkUiTests', 'UiSmokeTests', 'InputUiTests', 'AlignmentUiTests', 'RepaintUiTests', 'SceneUiTests', 'CheckBoxUiTests')) {
+    foreach ($test in @('ExperienceUiTests', 'SystemProxyTests', 'AuditCoreTests', 'AuditUiTests', 'EmojiUiTests', 'ResizeUiTests', 'CheckBoxFrameTests', 'SubscriptionNameTests', 'SubscriptionNameUiTests', 'IntegrationTests', 'NetworkTests', 'NodeUiTests', 'NetworkUiTests', 'UiSmokeTests', 'InputUiTests', 'AlignmentUiTests', 'RepaintUiTests', 'SceneUiTests', 'CheckBoxUiTests')) {
         $testExe = Join-Path $stage ($test + '.exe')
         & $compiler @common /target:exe "/out:$testExe" "/reference:$executable" (Join-Path $stage "tests/$test.cs")
         if ($LASTEXITCODE -ne 0) { throw "Test compilation failed: $test" }
-        if ($test -in @('AuditCoreTests', 'AuditUiTests', 'IntegrationTests', 'NetworkTests', 'NodeUiTests')) { & $testExe $core } else { & $testExe }
+        if ($test -in @('ExperienceUiTests', 'AuditCoreTests', 'AuditUiTests', 'IntegrationTests', 'NetworkTests', 'NodeUiTests')) { & $testExe $core } else { & $testExe }
         if ($LASTEXITCODE -ne 0) { throw "Regression checks failed: $test" }
         Remove-Item $testExe
     }
